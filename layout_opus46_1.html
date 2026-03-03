@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jigex Scatter 布局模���器 · Opus 46</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+:root {
+  --bg: #0f0f13;
+  --surface: #17171e;
+  --card: #1e1e28;
+  --border: #2c2c3e;
+  --text: #e8e6f0;
+  --muted: #6b6880;
+  --core: #3b82f6;
+  --core-light: rgba(59,130,246,0.15);
+  --tab: #f59e0b;
+  --tab-light: rgba(245,158,11,0.15);
+  --hole: #ef4444;
+  --hole-light: rgba(239,68,68,0.12);
+  --remain: #10b981;
+  --remain-light: rgba(16,185,129,0.12);
+  --margin-c: #a855f7;
+  --accent: #6366f1;
+  --piece-fill: rgba(245,158,11,0.35);
+  --piece-stroke: rgba(245,158,11,0.8);
+  --subject-fill: rgba(59,130,246,0.12);
+  --subject-stroke: rgba(59,130,246,0.5);
+  --grid-line: rgba(255,255,255,0.06);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Noto Serif SC', serif;
+  min-height: 100vh;
+}
+
+.page { max-width: 1100px; margin: 0 auto; padding: 40px 28px 120px; }
+
+/* HERO */
+.hero {
+  margin-bottom: 48px;
+  padding: 36px 40px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 4px;
+  color: var(--accent); text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.hero-title { font-size: 30px; font-weight: 700; line-height: 1.25; margin-bottom: 12px; }
+.hero-title .hl { color: var(--tab); }
+.hero-sub { font-size: 14px; color: var(--muted); line-height: 1.8; }
+
+/* CONTROLS */
+.ctrl-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+.ctrl-row { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin-bottom: 14px; }
+.ctrl-row:last-child { margin-bottom: 0; }
+.ctrl-group { display: flex; align-items: center; gap: 10px; }
+.ctrl-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; letter-spacing: 1px;
+  color: var(--muted); min-width: 90px;
+}
+.ctrl-group input[type=range] { width: 160px; accent-color: var(--accent); }
+.ctrl-group input[type=file] {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; color: var(--text);
+}
+.ctrl-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px; font-weight: 700;
+  color: var(--text); min-width: 40px;
+}
+.btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 700;
+  padding: 8px 20px;
+  border: 1px solid var(--accent);
+  background: rgba(99,102,241,0.15);
+  color: var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.15s;
+}
+.btn:hover { background: rgba(99,102,241,0.3); }
+.btn-warn { border-color: var(--tab); color: var(--tab); background: rgba(245,158,11,0.1); }
+.btn-warn:hover { background: rgba(245,158,11,0.25); }
+
+select.ctrl-select {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; color: var(--text);
+  background: var(--card); border: 1px solid var(--border);
+  padding: 6px 10px; border-radius: 6px;
+}
+
+.chk-group { display: flex; align-items: center; gap: 6px; }
+.chk-group input[type=checkbox] { accent-color: var(--accent); }
+.chk-group label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--muted);
+}
+
+/* STAT ROW */
+.stat-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.stat {
+  flex: 1; min-width: 100px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.stat-k {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; letter-spacing: 1px;
+  color: var(--muted); text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.stat-v {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px; font-weight: 700;
+}
+.sv-core { color: var(--core); }
+.sv-tab { color: var(--tab); }
+.sv-remain { color: var(--remain); }
+.sv-accent { color: var(--accent); }
+.sv-hole { color: var(--hole); }
+.sv-text { color: var(--text); }
+
+/* CANVAS */
+.canvas-wrap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  position: relative;
+}
+.canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: crosshair;
+}
+.canvas-cap {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--muted);
+  text-align: center; margin-top: 8px;
+  letter-spacing: 1px;
+}
+
+/* LEGEND */
+.legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+/* LOG */
+.log-panel {
+  background: #0a0a10;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #8a8799;
+  margin-top: 16px;
+}
+.log-panel .log-hl { color: var(--tab); }
+.log-panel .log-ok { color: var(--remain); }
+.log-panel .log-info { color: var(--core); }
+
+/* SECTION */
+.section { margin-bottom: 40px; }
+.section-title {
+  font-size: 18px; font-weight: 700;
+  margin-bottom: 12px;
+  display: flex; align-items: center; gap: 10px;
+}
+.badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; letter-spacing: 2px;
+  padding: 3px 8px; border-radius: 4px;
+}
+.badge-amber { background: var(--tab-light); color: var(--tab); }
+.badge-blue { background: var(--core-light); color: var(--core); }
+.badge-green { background: var(--remain-light); color: var(--remain); }
+
+.callout {
+  border-left: 3px solid var(--accent);
+  background: rgba(99,102,241,0.07);
+  border-radius: 0 8px 8px 0;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 13px; line-height: 1.85;
+  color: #b8b4cc;
+}
+.callout strong { color: var(--text); }
+.callout code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; background: rgba(255,255,255,0.07);
+  padding: 1px 5px; border-radius: 3px; color: #f59e0b;
+}
+
+/* Two-col layout */
+.two-col { display: flex; gap: 16px; }
+.two-col > .col-left { flex: 0 0 300px; }
+.two-col > .col-right { flex: 1; min-width: 0; }
+
+@media (max-width: 800px) {
+  .two-col { flex-direction: column; }
+  .two-col > .col-left { flex: none; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-eyebrow">Jigex Scatter 布局模拟器 · Opus 46</div>
+  <h1 class="hero-title">
+    完整移植 <span class="hl">螺旋矩形散布</span> 逻辑
+  </h1>
+  <p class="hero-sub">
+    上传图片 → Subject 缩放 → cutChoices 计算行列 → knife.cut 生成碎片规格 → <strong>scatter 螺旋矩形布局</strong><br>
+    完整复现 jigex-prog.js 从图片到碎片布局的全链路，保留画布中央的图片区域。
+  </p>
+</div>
+
+<!-- CONTROLS -->
+<div class="ctrl-panel">
+  <div class="ctrl-row">
+    <div class="ctrl-group">
+      <span class="ctrl-label">上传图片</span>
+      <input type="file" id="file-input" accept="image/*">
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">碎片数</span>
+      <input type="range" id="sl-nop" min="6" max="500" value="100" step="1">
+      <span class="ctrl-val" id="vl-nop">100</span>
+    </div>
+    <button class="btn" id="btn-run">▶ 执行散布</button>
+  </div>
+  <div class="ctrl-row">
+    <div class="ctrl-group">
+      <span class="ctrl-label">画布宽</span>
+      <input type="range" id="sl-cw" min="400" max="1600" value="1000" step="10">
+      <span class="ctrl-val" id="vl-cw">1000</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">画布高</span>
+      <input type="range" id="sl-ch" min="300" max="1000" value="650" step="10">
+      <span class="ctrl-val" id="vl-ch">650</span>
+    </div>
+    <div class="chk-group">
+      <input type="checkbox" id="chk-compact">
+      <label for="chk-compact">紧凑模式</label>
+    </div>
+    <div class="chk-group">
+      <input type="checkbox" id="chk-boxtop">
+      <label for="chk-boxtop">显示盒顶</label>
+    </div>
+    <div class="chk-group">
+      <input type="checkbox" id="chk-edges" checked>
+      <label for="chk-edges">显示网格</label>
+    </div>
+    <div class="chk-group">
+      <input type="checkbox" id="chk-numbers" checked>
+      <label for="chk-numbers">碎片编号</label>
+    </div>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stat-row">
+  <div class="stat"><div class="stat-k">图片原始尺寸</div><div class="stat-v sv-text" id="sv-img-size">—</div></div>
+  <div class="stat"><div class="stat-k">Subject 缩放后</div><div class="stat-v sv-core" id="sv-subject">—</div></div>
+  <div class="stat"><div class="stat-k">Rows × Cols</div><div class="stat-v sv-tab" id="sv-rc">—</div></div>
+  <div class="stat"><div class="stat-k">实际碎片数</div><div class="stat-v sv-remain" id="sv-actual">—</div></div>
+  <div class="stat"><div class="stat-k">core size</div><div class="stat-v sv-accent" id="sv-core-size">—</div></div>
+  <div class="stat"><div class="stat-k">格子 S × C</div><div class="stat-v sv-tab" id="sv-sc">—</div></div>
+</div>
+<div class="stat-row">
+  <div class="stat"><div class="stat-k">p (avg piece w)</div><div class="stat-v sv-core" id="sv-p">—</div></div>
+  <div class="stat"><div class="stat-k">g (avg piece h)</div><div class="stat-v sv-core" id="sv-g">—</div></div>
+  <div class="stat"><div class="stat-k">散布碎片数</div><div class="stat-v sv-remain" id="sv-laid">—</div></div>
+  <div class="stat"><div class="stat-k">散布方向序列</div><div class="stat-v sv-tab" id="sv-dirs">—</div></div>
+</div>
+
+<!-- CANVAS -->
+<div class="canvas-wrap">
+  <canvas id="main-canvas" width="1000" height="650"></canvas>
+  <div class="canvas-cap">scatter 螺旋矩形布局 — 碎片围绕中央图片区域（Subject）排列</div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(59,130,246,0.5)"></div>Subject 图片区域</div>
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(245,158,11,0.7)"></div>碎片位置</div>
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(99,102,241,0.4)"></div>格子网格 (S×C)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(239,68,68,0.5)"></div>螺旋边界收缩线</div>
+</div>
+
+<!-- ALGORITHM EXPLANATION -->
+<div class="section">
+  <div class="section-title"><span class="badge badge-amber">ALGORITHM</span> 螺旋矩形散布逻辑详解</div>
+  <div class="callout">
+    <strong>核心思路：</strong>
+    scatter 把碎片沿<strong>螺旋矩形路径</strong>由外向内逐层铺放。方向序列：<code>右→下→左→上</code>，每走完一条边，外边界向内收缩。
+    已有group或已移动的碎片（boxTop区域碎片）会被跳过，只散布"孤立未移动"的碎片。
+    <br><br>
+    <strong>碰撞检测：</strong>每个候选位置会检查：1) 是否与已放置碎片重叠 2) 是否与 boxTop 重叠。
+    如果位置有冲突就跳过到下一格。如果一整圈都放不下，螺旋就终止。
+  </div>
+</div>
+
+<!-- LOG -->
+<div class="section">
+  <div class="section-title"><span class="badge badge-green">LOG</span> 运行日志</div>
+  <div class="log-panel" id="log-panel">
+    <div style="color:var(--muted)">等待执行...</div>
+  </div>
+</div>
+
+</div><!-- /page -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// Jigex Scatter 布局模拟器 — 完整移植自 jigex-prog.js
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const $ = id => document.getElementById(id);
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+// ── 日志系统 ─────────────────────────────────────────────────────────────────
+const logPanel = $('log-panel');
+function clearLog() { logPanel.innerHTML = ''; }
+function log(msg, cls='') {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = msg;
+  logPanel.appendChild(d);
+  logPanel.scrollTop = logPanel.scrollHeight;
+}
+
+// ── 全局状态 ─────────────────────────────────────────────────────────────────
+let srcImage = null;   // 用户上传的原始图片
+let canvasW = 1000;
+let canvasH = 650;
+let targetNop = 100;
+
+// ── Canvas 工具 ──────────────────────────────────────────────────────────────
+function setupCanvas(id, w, h) {
+  const el = $(id);
+  el.width = w * DPR;
+  el.height = h * DPR;
+  el.style.width = w + 'px';
+  el.style.height = h + 'px';
+  const cx = el.getContext('2d');
+  cx.scale(DPR, DPR);
+  return cx;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STEP 1: Subject — 缩放图片使其适配画布
+// 移植自 _.Subject.prototype.rescale
+// ═══════════════════════════════════════════════════════════════════════════════
+function computeSubject(imgW, imgH, cW, cH) {
+  // 原始逻辑：scale 从1开始，先缩到面积占比≤35%且不超画布90%
+  // 再放大直到面积≥35%或达到画布90%
+  const Me = 0.9; // 最大占比
+  let e = imgW, t = imgH;
+  let area = e * t, canvasArea = cW * cH;
+  let scale = 1;
+
+  // 先缩小
+  let shrunk = false;
+  while (area / canvasArea > 0.35 || e > cW * Me || t > cH * Me) {
+    scale -= 0.01;
+    e = imgW * scale;
+    t = imgH * scale;
+    area = e * t;
+    shrunk = true;
+  }
+
+  // 如果没缩过，尝试放大
+  if (!shrunk) {
+    while (area / canvasArea < 0.35 && e < cW * Me && t < cH * Me) {
+      scale += 0.01;
+      e = imgW * scale;
+      t = imgH * scale;
+      area = e * t;
+    }
+  }
+
+  const width = Math.round(imgW * scale);
+  const height = Math.round(imgH * scale);
+
+  return { width, height, scale };
+}
+
+// ═══════════════════════════���═══════════════════════════════════════════════════
+// STEP 2: cutChoices — 计算碎片行列组合
+// 移植自 _.knife.cutChoices
+// ═══════════════════════════════════════════════════════════════════════════════
+function cutChoices(subjectW, subjectH, defNop) {
+  const choices = [];
+  let m = Math.floor(Math.max(subjectW, subjectH) / 3);
+  let found = false;
+  let selected = null;
+
+  while (m > 10) {
+    const rows = Math.floor(subjectH / m);
+    const cols = Math.floor(subjectW / m);
+    const nop = rows * cols;
+
+    if (nop >= 6) {
+      const sel = !found && nop >= defNop;
+      choices.push({ nop, rows, cols, size: m, selected: sel });
+      if (sel) { found = true; selected = choices[choices.length - 1]; }
+    }
+    if (nop >= 1000) break;
+
+    const s1 = Math.floor(subjectH / (rows + 1));
+    const s2 = Math.floor(subjectW / (cols + 1));
+    m = Math.max(s1, s2);
+  }
+
+  // 如果没有找到匹配的，选最后一个
+  if (!found && choices.length) {
+    for (let i = choices.length - 1; i >= 0; i--) {
+      if (i === 0 || choices[i].size >= 36) {
+        choices[i].selected = true;
+        selected = choices[i];
+        break;
+      }
+    }
+  }
+
+  return { choices, selected };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STEP 3: knife.cut — 生成碎片规格（核心尺寸计算）
+// 移植自 knife.cut 中 core.width/height 的余数均摊逻辑
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Tab/Hole 方向表（从源码 _e 数组）
+const TAB_HOLE_PATTERN = [
+  false, false, true, false, true, true, false, true, true, false,
+  true, false, true, true, false, true, true, false, true, false,
+  true, true, false, true, true, false, true, false, true, true
+];
+
+function knifeCut(subjectW, subjectH, nopObj) {
+  const rows = nopObj.rows;
+  const cols = nopObj.cols;
+  const size = nopObj.size;
+  const margin = 7;
+
+  // ── core.width / core.height 余数均摊（完整移植） ──
+  let kW = subjectW % size;  // 横向余数
+  let kH = subjectH % size;  // 纵向余数
+  const CW = Math.floor(kW / cols);  // 每列平均多分几px
+  const CH = Math.floor(kH / rows);
+  let zW = kW % cols;  // 零头
+  let zH = kH % rows;
+
+  // 构建碎片规格列表
+  const specs = [];
+  let id = 1;
+
+  // 用简单伪随机生成 sortOrder
+  const seed = 12345;
+  let rngState = seed;
+  function rng() {
+    rngState = (rngState * 1103515245 + 12345) & 0x7fffffff;
+    return rngState / 0x7fffffff;
+  }
+
+  let tabIdxR = Math.round(Math.random() * (TAB_HOLE_PATTERN.length - 1));
+  let tabIdxB = Math.round(Math.random() * (TAB_HOLE_PATTERN.length - 1));
+
+  // 先计算每列的 coreWidth 和每行的 coreHeight
+  const colWidths = [];
+  let tempKW = subjectW % size;
+  let tempZW = tempKW % cols;
+  for (let c = 0; c < cols; c++) {
+    let cw = size;
+    if (tempKW > 0) {
+      tempKW -= CW;
+      cw += CW;
+      if (tempZW > 0) { cw++; tempZW--; }
+    }
+    colWidths.push(cw);
+  }
+
+  const rowHeights = [];
+  let tempKH = subjectH % size;
+  let tempZH = tempKH % rows;
+  for (let r = 0; r < rows; r++) {
+    let ch = size;
+    if (tempKH > 0) {
+      tempKH -= CH;
+      ch += CH;
+      if (tempZH > 0) { ch++; tempZH--; }
+    }
+    rowHeights.push(ch);
+  }
+
+  // 估算 tab/hole 厚度（~22% of core dimension，源码通过canvas像素测量）
+  function estimateThickness(coreDim, isTab, isBorder) {
+    if (isBorder) return 0;
+    // 实际源码通过绘制曲线后 getImageData 测量，这里用比例估算
+    return isTab ? Math.round(coreDim * 0.22) : Math.round(coreDim * 0.11);
+  }
+
+  // 为每个碎片生成边缘信息
+  // 先生成 tab/hole 分配表
+  const edgeRight = [];  // [row][col] = isTab for right edge
+  const edgeBottom = []; // [row][col] = isTab for bottom edge
+
+  for (let r = 0; r < rows; r++) {
+    edgeRight[r] = [];
+    edgeBottom[r] = [];
+    for (let c = 0; c < cols; c++) {
+      // 右边缘
+      if (c === cols - 1) {
+        edgeRight[r][c] = null; // 边界，无凸起
+      } else if (r === 0) {
+        // 第一行，从 pattern 取
+        edgeRight[r][c] = TAB_HOLE_PATTERN[tabIdxR++ % TAB_HOLE_PATTERN.length];
+      } else {
+        // 非第一行，取反上方的右边缘（保持同列一致性不完全对，简化处理）
+        edgeRight[r][c] = !edgeRight[r - 1][c];
+      }
+
+      // 下边缘
+      if (r === rows - 1) {
+        edgeBottom[r][c] = null;
+      } else if (c === 0) {
+        edgeBottom[r][c] = TAB_HOLE_PATTERN[tabIdxB++ % TAB_HOLE_PATTERN.length];
+      } else {
+        edgeBottom[r][c] = !edgeBottom[r][c - 1];
+      }
+    }
+  }
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const coreW = colWidths[c];
+      const coreH = rowHeights[r];
+
+      // 边缘厚度
+      const isBorderTop = (r === 0);
+      const isBorderBot = (r === rows - 1);
+      const isBorderLeft = (c === 0);
+      const isBorderRight = (c === cols - 1);
+
+      // top edge: if not top border, opposite of the piece above's bottom edge
+      const topTab = isBorderTop ? null : !edgeBottom[r - 1][c];
+      const topThick = estimateThickness(coreW, topTab === true, isBorderTop);
+
+      const botTab = edgeBottom[r][c];
+      const botThick = estimateThickness(coreW, botTab === true, isBorderBot);
+
+      const leftTab = isBorderLeft ? null : !edgeRight[r][c - 1];
+      const leftThick = estimateThickness(coreH, leftTab === true, isBorderLeft);
+
+      const rightTab = edgeRight[r][c];
+      const rightThick = estimateThickness(coreH, rightTab === true, isBorderRight);
+
+      const pieceW = leftThick + coreW + rightThick + 2 * margin;
+      const pieceH = topThick + coreH + botThick + 2 * margin;
+
+      const isEdge = isBorderTop || isBorderBot || isBorderLeft || isBorderRight;
+
+      specs.push({
+        id: id++,
+        row: r,
+        col: c,
+        core: { width: coreW, height: coreH },
+        width: pieceW,
+        height: pieceH,
+        margin: margin,
+        isEdge: isEdge,
+        sortOrder: rng(),
+        edges: {
+          top: { thickness: topThick, border: isBorderTop, tab: topTab },
+          bottom: { thickness: botThick, border: isBorderBot, tab: botTab },
+          left: { thickness: leftThick, border: isBorderLeft, tab: leftTab },
+          right: { thickness: rightThick, border: isBorderRight, tab: rightTab },
+        }
+      });
+    }
+  }
+
+  return { specs, rows, cols, colWidths, rowHeights, margin };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STEP 4: scatter — 螺旋矩形散布（核心算法完整移植）
+// 移植自 _.Puzzle.prototype.scatter
+// ═══════════════════════════════════════════════════════════════════════════════
+function scatter(specs, canvasW, canvasH, subjectW, subjectH, options = {}) {
+  const compactMode = options.compact || false;
+  const showBoxTop = options.boxTop || false;
+
+  const margin = specs[0].margin;
+  const h = 2 * margin; // = 14, 两侧留白总宽
+
+  // ── 计算参考碎片尺寸 p 和 g ──
+  let pSum = 0, gSum = 0;
+  specs.forEach(s => {
+    pSum += s.width - h;
+    gSum += s.height - h;
+  });
+  const p = pSum * 1.05 / specs.length;  // 平均净宽 + 5%余量
+  const g = gSum * 1.05 / specs.length;  // 平均净高 + 5%余量
+
+  log(`p (avg piece w × 1.05) = ${p.toFixed(2)}`, 'log-info');
+  log(`g (avg piece h × 1.05) = ${g.toFixed(2)}`, 'log-info');
+
+  // ── 碎片间距参数（源码中 l, c, u, d 变量） ──
+  const l_gap = p / 4;   // 水平大间距
+  const c_gap = g / 4;   // 垂直大间距
+  const u_gap = p / 8;   // 水平小间距
+  const d_gap = g / 8;   // 垂直小间距
+
+  // ── 计算格子尺寸 S 和 C ──
+  // 源码: w = (canvasW - b) / p, b = Ge (iOS safe area offset, 我们取0)
+  const b = 0; // Ge offset
+  const wFloat = (canvasW - b) / p;   // 浮点列数
+  const PFloat = canvasH / g;         // 浮点行数
+
+  // 四舍五入
+  const E = (wFloat - Math.floor(wFloat)) >= 0.5 ? 1 : 0;
+  const k = (PFloat - Math.floor(PFloat)) >= 0.5 ? 1 : 0;
+
+  // 格子尺寸
+  const S = p * (wFloat / (Math.floor(wFloat) + E));  // 格子宽
+  const C = g * (PFloat / (Math.floor(PFloat) + k));  // 格子高
+
+  log(`wFloat=${wFloat.toFixed(3)}, PFloat=${PFloat.toFixed(3)}, E=${E}, k=${k}`, 'log-info');
+  log(`S (格子宽) = ${S.toFixed(2)}, C (格子高) = ${C.toFixed(2)}`, 'log-hl');
+
+  // ── 散布起始参数（源码变量映射）──
+  // 源码中的 T, z, I, L, O, A, M, j, R, D, N 变量
+  const T = S / 2;   // 半格宽
+  const z = C / 2;   // 半格高
+
+  let I = b + p / 2;           // 当前x（从左边开始，碎片中心）
+  let L = g / 2;               // 当前y（从上边开始）
+  let O = canvasW;             // 右边界
+  let A = C;                   // 上边界（第二层开始高度）
+  let M = canvasH;             // 下边界
+  let j = 3;                   // 初始方向：3=右
+
+  // ── 边缘完成后的边距调整（源码条件: 碎片数≥35且edgesOnly/edgeComplete）──
+  // 简化：我们不模拟边缘完成状态，但保留逻辑结构
+  const useEdgeMargin = false;
+  if (useEdgeMargin && specs.length >= 35) {
+    // 源码中的边距收缩逻辑
+    I += b ? 0 : u_gap;
+    L += d_gap;
+    O = canvasW - u_gap;
+    A = C + d_gap;
+    M = canvasH - d_gap;
+  }
+
+  // ── boxTop 检测（简化：画布中心的图片区域）──
+  const subjectRect = {
+    x: (canvasW - subjectW) / 2,
+    y: (canvasH - subjectH) / 2,
+    w: subjectW,
+    h: subjectH
+  };
+
+  function isOverlapBoxTop(x, y, pw, ph) {
+    if (!showBoxTop) return false;
+    const margin2 = pw / 4;
+    return (x - margin2 < subjectRect.x + subjectRect.w &&
+            x + margin2 > subjectRect.x &&
+            y - ph / 4 < subjectRect.y + subjectRect.h &&
+            y + ph / 4 > subjectRect.y);
+  }
+
+  // ── 碰撞检测：检查候选位置是否与已放置碎片重叠 ──
+  const placedPieces = []; // { x, y, w, h }
+
+  function isOverlapPlaced(x, y, pw, ph) {
+    for (let i = placedPieces.length - 1; i >= 0; i--) {
+      const r = placedPieces[i];
+      const cx = Math.abs(x - r.x);
+      const uw = pw / 2 + r.w / 2;
+      const cy = Math.abs(y - r.y);
+      if (cx < uw && cy < ph / 2 + r.h / 2) return true;
+    }
+    return false;
+  }
+
+  // ── 构建散布序列（源码 getScatterSequence）──
+  // 按 sortOrder 排序，并尝试避免相邻碎片紧挨
+  const sortedSpecs = specs.slice().sort((a, b) => a.sortOrder - b.sortOrder);
+  const sequence = [];
+  const seqSet = new Set();
+
+  // 简化：直接用 sortOrder 排列
+  for (let i = sortedSpecs.length - 1; i >= 0; i--) {
+    sequence.push(sortedSpecs[i].id);
+    seqSet.add(sortedSpecs[i].id);
+  }
+
+  // ── 螺旋矩形散布的主循环 ──
+  // 完整移植源码 scatter 函数中的 for-switch 逻辑
+  // 源码变量映射:
+  //   N = countInSameBoundary (用于判断是否该缩边界)
+  //   R = rightBoundaryRemaining
+  //   D = topBoundaryRemaining (在源码中复用了变量)
+  //   变量y在源码中被复用了很多含义
+
+  let N = 999;  // 上/下边界剩余次数
+  let R = 999;  // 左/右边界剩余次数
+
+  // 源码中 boxTop 相关的条件：
+  // y = compactMode || (boxTop.isShowing && !edgesOnly && percentComplete<=50)
+  const useCompact = compactMode;
+
+  const results = [];  // 最终放置结果
+  const toPlace = [];  // 待放置碎片
+
+  // 筛选需要散布的碎片（源码：group==null && showable && state==resting && !hasMoved）
+  // 我们简化为：所有碎片都需要散布
+  specs.forEach(s => { toPlace.push(s); });
+
+  // 按散布序列排列
+  const orderedPieces = [];
+  for (const id of sequence) {
+    const sp = toPlace.find(s => s.id === id);
+    if (sp) orderedPieces.push(sp);
+  }
+
+  let laidCount = 0;
+  const dirNames = ['上', '下', '左', '右'];  // 0=up,1=bot,2=left,3=right
+  const dirLog = [];
+
+  // ── 主散布循环（完整移植源码 switch-case 逻辑）──
+  for (let idx = orderedPieces.length - 1; idx >= 0; idx--) {
+    const piece = orderedPieces[idx];
+
+    // 检查碰撞
+    const Y_overlap = isOverlapBoxTop(I, L, piece.width, piece.height) ||
+                      isOverlapPlaced(I, L, piece.width, piece.height);
+
+    const X_placeOk = !Y_overlap &&
+      ((j === 3 && N > 0) || (j === 2 && N > 0) || (j === 0 && R > 0) || (j === 1 && R > 0));
+
+    if (X_placeOk) {
+      // 随机微偏移（源码中的 jitter）
+      const Q_fact = useCompact ? 0.03125 : 0.0625;
+      const jitterX = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * p * Q_fact;
+      const jitterY = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * g * Q_fact;
+
+      results.push({
+        piece: piece,
+        x: I + jitterX,
+        y: L + jitterY
+      });
+      placedPieces.push({
+        x: I + jitterX,
+        y: L + jitterY,
+        w: piece.width,
+        h: piece.height
+      });
+      laidCount++;
+    } else {
+      // 放不下，回推到待放列表
+      orderedPieces.unshift(piece);
+    }
+
+    // ── 格子步进和螺旋转向逻辑（完整移植源码 switch(j) case 0/1/2/3）──
+    const ee = Y_overlap ? T : S;   // 有碰撞就步进半格，否则步进全格
+    const te = Y_overlap ? z : C;
+
+    let f, v; // 临时变量，源码用于测试下一位置
+
+    switch (j) {
+      case 3: // 向右
+        f = I + ee - (useCompact ? u_gap : 0);
+        if (f > O - l_gap) {
+          // 到右边界，转向下
+          j = 1;
+          N--;
+          I = O - p / 2;
+          if (X_placeOk) L += te;
+          if (R > 0) O -= S; // 右边界向内收缩
+        } else {
+          I = f;
+        }
+        break;
+
+      case 1: // 向下
+        v = L + te - (useCompact ? d_gap : 0);
+        if (v > M - c_gap) {
+          // 到下边界，转向左
+          j = 2;
+          R--;
+          L = M - g / 2;
+          if (X_placeOk) I -= ee;
+          if (N > 0) M -= C; // 下边界向内收缩
+        } else {
+          L = v;
+        }
+        break;
+
+      case 2: // 向左
+        f = I - ee + (useCompact ? u_gap : 0);
+        if (f < b + l_gap) {
+          // 到左边界，转向上
+          j = 0;
+          N--;
+          I = b + p / 2;
+          if (X_placeOk) L -= te;
+          if (R > 0) b += S; // 左边界���内收缩（源码中b会增加）
+        } else {
+          I = f;
+        }
+        break;
+
+      case 0: // 向上
+        v = L - te + (useCompact ? d_gap : 0);
+        if (v < A + c_gap) {
+          // 到上边界，转向右
+          j = 3;
+          R--;
+          L = A + g / 2;
+          if (X_placeOk) I += ee;
+          if (N > 0) A += C; // 上边界向内收缩
+        } else {
+          L = v;
+        }
+        break;
+    }
+
+    dirLog.push(j);
+
+    // 安全退出：如果边界都收缩完了
+    if (N <= 0 && R <= 0) {
+      log(`螺旋边界已完全收缩，停止散布`, 'log-hl');
+      break;
+    }
+  }
+
+  log(`散布完成: ${laidCount} / ${specs.length} 块碎片已放置`, 'log-ok');
+
+  return {
+    results,
+    p, g, S, C,
+    wFloat, PFloat,
+    laidCount,
+    subjectRect,
+    dirLog
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 渲染
+// ═══════════════════════════════════════════════════════════════════════════════
+function render(scatterResult, cutResult, subject, cx) {
+  const W = canvasW, H = canvasH;
+  cx.clearRect(0, 0, W, H);
+
+  // 背景
+  cx.fillStyle = '#1a1a24';
+  cx.fillRect(0, 0, W, H);
+
+  const showGrid = $('chk-edges').checked;
+  const showNumbers = $('chk-numbers').checked;
+  const showBoxTop = $('chk-boxtop').checked;
+  const { results, S, C, subjectRect } = scatterResult;
+
+  // ── 绘制网格 ──
+  if (showGrid) {
+    cx.strokeStyle = 'rgba(255,255,255,0.04)';
+    cx.lineWidth = 0.5;
+    for (let x = 0; x < W; x += S) {
+      cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x, H); cx.stroke();
+    }
+    for (let y = 0; y < H; y += C) {
+      cx.beginPath(); cx.moveTo(0, y); cx.lineTo(W, y); cx.stroke();
+    }
+  }
+
+  // ── 绘制 Subject 区域（画布中心的图片区域）──
+  if (srcImage && subject) {
+    cx.save();
+    cx.globalAlpha = 0.25;
+    cx.drawImage(srcImage, subjectRect.x, subjectRect.y, subjectRect.w, subjectRect.h);
+    cx.restore();
+  }
+
+  // Subject 边框
+  cx.strokeStyle = 'rgba(59,130,246,0.5)';
+  cx.lineWidth = 1.5;
+  cx.setLineDash([6, 4]);
+  cx.strokeRect(subjectRect.x, subjectRect.y, subjectRect.w, subjectRect.h);
+  cx.setLineDash([]);
+
+  // Subject 标签
+  cx.fillStyle = 'rgba(59,130,246,0.7)';
+  cx.font = '11px JetBrains Mono, monospace';
+  cx.textAlign = 'center';
+  cx.fillText(`Subject ${subject.width}×${subject.height}`,
+    subjectRect.x + subjectRect.w / 2, subjectRect.y + subjectRect.h / 2);
+
+  // ── 绘制碎片 ──
+  results.forEach((r, i) => {
+    const pc = r.piece;
+    const x = r.x, y = r.y;
+    const hw = pc.width / 2, hh = pc.height / 2;
+
+    // 碎片背景
+    const isEdge = pc.isEdge;
+    const fillColor = isEdge ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)';
+    const strokeColor = isEdge ? 'rgba(16,185,129,0.6)' : 'rgba(245,158,11,0.6)';
+
+    cx.fillStyle = fillColor;
+    cx.strokeStyle = strokeColor;
+    cx.lineWidth = 1;
+
+    // 绘制碎片矩形（简化的形状，不画凸起/凹口）
+    const rx = x - hw, ry = y - hh;
+    cx.beginPath();
+    if (cx.roundRect) cx.roundRect(rx, ry, pc.width, pc.height, 3);
+    else cx.rect(rx, ry, pc.width, pc.height);
+    cx.fill();
+    cx.stroke();
+
+    // Core 区域（内部矩形）
+    const coreX = rx + pc.edges.left.thickness + pc.margin;
+    const coreY = ry + pc.edges.top.thickness + pc.margin;
+    cx.fillStyle = isEdge ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)';
+    cx.fillRect(coreX, coreY, pc.core.width, pc.core.height);
+
+    // 编号
+    if (showNumbers) {
+      cx.fillStyle = isEdge ? 'rgba(16,185,129,0.8)' : 'rgba(245,158,11,0.8)';
+      const fontSize = Math.min(pc.width / 3, 11);
+      cx.font = `${fontSize}px JetBrains Mono`;
+      cx.textAlign = 'center';
+      cx.textBaseline = 'middle';
+      cx.fillText(pc.id.toString(), x, y);
+    }
+  });
+
+  // ── boxTop 区域指示 ──
+  if (showBoxTop) {
+    cx.fillStyle = 'rgba(168,85,247,0.08)';
+    cx.fillRect(subjectRect.x, subjectRect.y, subjectRect.w, subjectRect.h);
+    cx.strokeStyle = 'rgba(168,85,247,0.5)';
+    cx.lineWidth = 2;
+    cx.setLineDash([4, 4]);
+    cx.strokeRect(subjectRect.x, subjectRect.y, subjectRect.w, subjectRect.h);
+    cx.setLineDash([]);
+    cx.fillStyle = 'rgba(168,85,247,0.7)';
+    cx.font = '12px Noto Serif SC';
+    cx.textAlign = 'center';
+    cx.fillText('BoxTop (碰撞避让区)', subjectRect.x + subjectRect.w / 2, subjectRect.y - 8);
+  }
+
+  // ── 画布边框 ──
+  cx.strokeStyle = 'rgba(255,255,255,0.15)';
+  cx.lineWidth = 1;
+  cx.strokeRect(0, 0, W, H);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 主流程
+// ═══════════════════════════════════════════════════════════════════════════════
+function runPipeline() {
+  clearLog();
+
+  if (!srcImage) {
+    log('请先上传图片！', 'log-hl');
+    // 用默认图片尺寸模拟
+    runWithDimensions(800, 600);
+    return;
+  }
+
+  runWithDimensions(srcImage.naturalWidth, srcImage.naturalHeight);
+}
+
+function runWithDimensions(imgW, imgH) {
+  const cx = setupCanvas('main-canvas', canvasW, canvasH);
+
+  log(`=== 开始执行散布流水线 ===`, 'log-ok');
+  log(`画布: ${canvasW} × ${canvasH}`, 'log-info');
+  log(`图片原始: ${imgW} × ${imgH}`, 'log-info');
+
+  // STEP 1: Subject 缩放
+  const subject = computeSubject(imgW, imgH, canvasW, canvasH);
+  log(`Subject 缩放: scale=${subject.scale.toFixed(4)}, size=${subject.width}×${subject.height}`, 'log-ok');
+
+  // STEP 2: cutChoices
+  const { choices, selected } = cutChoices(subject.width, subject.height, targetNop);
+  if (!selected) {
+    log('错误：无法找到合适的碎片分割方案', 'log-hl');
+    return;
+  }
+  log(`cutChoices: ${choices.length} 种方案, 选中 ${selected.nop} 片 (${selected.rows}×${selected.cols}, size=${selected.size})`, 'log-ok');
+
+  // STEP 3: knife.cut
+  const cutResult = knifeCut(subject.width, subject.height, selected);
+  log(`knife.cut: 生成 ${cutResult.specs.length} 块碎片规格`, 'log-ok');
+  log(`  行高: [${cutResult.rowHeights.join(', ')}]`, 'log-info');
+  log(`  列宽: [${cutResult.colWidths.join(', ')}]`, 'log-info');
+
+  // 打印首块碎片详情
+  const first = cutResult.specs[0];
+  log(`  碎片#1: core=${first.core.width}×${first.core.height}, piece=${first.width}×${first.height}, edge=${first.isEdge}`, 'log-info');
+
+  // STEP 4: scatter
+  const scatterResult = scatter(
+    cutResult.specs, canvasW, canvasH,
+    subject.width, subject.height,
+    {
+      compact: $('chk-compact').checked,
+      boxTop: $('chk-boxtop').checked
+    }
+  );
+
+  // 更新统计
+  $('sv-img-size').textContent = `${imgW}×${imgH}`;
+  $('sv-subject').textContent = `${subject.width}×${subject.height}`;
+  $('sv-rc').textContent = `${selected.rows}×${selected.cols}`;
+  $('sv-actual').textContent = selected.nop.toString();
+  $('sv-core-size').textContent = `${selected.size}px`;
+  $('sv-sc').textContent = `${scatterResult.S.toFixed(1)}×${scatterResult.C.toFixed(1)}`;
+  $('sv-p').textContent = scatterResult.p.toFixed(1);
+  $('sv-g').textContent = scatterResult.g.toFixed(1);
+  $('sv-laid').textContent = scatterResult.laidCount.toString();
+
+  // 方向序列统计
+  const dirCounts = [0, 0, 0, 0];
+  scatterResult.dirLog.forEach(d => dirCounts[d]++);
+  $('sv-dirs').textContent = `↑${dirCounts[0]} ↓${dirCounts[1]} ←${dirCounts[2]} →${dirCounts[3]}`;
+
+  // 渲染
+  render(scatterResult, cutResult, subject, cx);
+  log(`=== 渲染完成 ===`, 'log-ok');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 事件绑定
+// ═══════════════════════════════════════════════════════════════════════════════
+
+$('file-input').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    const img = new Image();
+    img.onload = function() {
+      srcImage = img;
+      log(`图片已加载: ${img.naturalWidth}×${img.naturalHeight}`, 'log-ok');
+      runPipeline();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+$('sl-nop').addEventListener('input', e => {
+  targetNop = +e.target.value;
+  $('vl-nop').textContent = targetNop;
+});
+
+$('sl-cw').addEventListener('input', e => {
+  canvasW = +e.target.value;
+  $('vl-cw').textContent = canvasW;
+});
+
+$('sl-ch').addEventListener('input', e => {
+  canvasH = +e.target.value;
+  $('vl-ch').textContent = canvasH;
+});
+
+$('btn-run').addEventListener('click', runPipeline);
+
+// 复选框变化时重新渲染
+['chk-compact', 'chk-boxtop', 'chk-edges', 'chk-numbers'].forEach(id => {
+  $(id).addEventListener('change', runPipeline);
+});
+
+// ── 初始化：用默认参数运行一次 ──
+runWithDimensions(800, 600);
+</script>
+</body>
+</html>
