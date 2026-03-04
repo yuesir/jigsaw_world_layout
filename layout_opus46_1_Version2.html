@@ -628,7 +628,7 @@ function scatter(cutResult, canvasWidth, canvasHeight, subjectW, subjectH, optio
     // 检测与 subject 预留区域的碰撞
     if (boxTopVisible || true) { // 始终保留中间区域
       let checkX = I, checkY = L;
-      let pad = { x: piece.coreW / 4, y: piece.coreH / 4 };
+      let pad = { x: piece.pieceW / 2, y: piece.pieceH / 2 };
       if (checkX + pad.x > subjectLeft && checkX - pad.x < subjectRight &&
           checkY + pad.y > subjectTop && checkY - pad.y < subjectBottom) {
         collision = true;
