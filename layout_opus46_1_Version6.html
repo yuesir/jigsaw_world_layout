@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jigex 布局模拟器 — Opus 46.1</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+:root {
+  --bg: #0f0f13;
+  --surface: #17171e;
+  --card: #1e1e28;
+  --border: #2c2c3e;
+  --text: #e8e6f0;
+  --muted: #6b6880;
+  --core: #3b82f6;
+  --tab: #f59e0b;
+  --hole: #ef4444;
+  --remain: #10b981;
+  --margin-c: #a855f7;
+  --accent: #6366f1;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Noto Serif SC', serif;
+  min-height: 100vh;
+}
+
+.page { max-width: 1280px; margin: 0 auto; padding: 32px 24px 80px; }
+
+.hero {
+  margin-bottom: 32px;
+  padding: 24px 32px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.hero-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.hero-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.hero-sub { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+/* ── Controls ── */
+.ctrl-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.ctrl-group { display: flex; align-items: center; gap: 8px; }
+.ctrl-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  min-width: 60px;
+}
+.ctrl-group input[type=range] { width: 100px; accent-color: var(--accent); }
+.ctrl-group select, .ctrl-group input[type=file] {
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+  padding: 6px 10px; border-radius: 6px; font-size: 12px;
+}
+.ctrl-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 32px;
+}
+.btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 8px 16px;
+  border: 1px solid var(--accent);
+  background: rgba(99,102,241,0.15);
+  color: var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  letter-spacing: 1px;
+}
+.btn:hover { background: rgba(99,102,241,0.3); }
+
+/* ── Canvas area ── */
+.canvas-wrap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+/* ── Stats ── */
+.stat-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.stat {
+  flex: 1;
+  min-width: 100px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.stat-k {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.stat-v {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  font-weight: 700;
+}
+.sv-core { color: var(--core); }
+.sv-tab  { color: var(--tab); }
+.sv-remain { color: var(--remain); }
+.sv-accent { color: var(--accent); }
+.sv-hole { color: var(--hole); }
+
+/* ── Log ── */
+.log-panel {
+  background: #0a0a10;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--muted);
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+.log-panel .log-info { color: var(--core); }
+.log-panel .log-warn { color: var(--tab); }
+.log-panel .log-err  { color: var(--hole); }
+.log-panel .log-ok   { color: var(--remain); }
+
+/* ── NOP choices ── */
+.nop-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.nop-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.nop-btn:hover { border-color: var(--accent); color: var(--accent); }
+.nop-btn.selected { border-color: var(--accent); background: rgba(99,102,241,0.2); color: var(--accent); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="hero">
+  <div class="hero-eyebrow">JIGEX LAYOUT SIMULATOR</div>
+  <h1 class="hero-title">Opus 46.1 — 散布布局模拟器</h1>
+  <p class="hero-sub">上传图片 → 选择碎片数 → 完整移植 jigex scatter 螺旋矩形布局逻辑</p>
+</div>
+
+<!-- Controls -->
+<div class="ctrl-panel">
+  <div class="ctrl-group">
+    <span class="ctrl-label">图片</span>
+    <input type="file" id="file-input" accept="image/*">
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">画布宽</span>
+    <input type="range" id="sl-cw" min="600" max="1600" value="1200" step="50">
+    <span class="ctrl-val" id="vl-cw">1200</span>
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">画布高</span>
+    <input type="range" id="sl-ch" min="400" max="1000" value="720" step="50">
+    <span class="ctrl-val" id="vl-ch">720</span>
+  </div>
+  <button class="btn" id="btn-run">▶ 重新布局</button>
+</div>
+
+<!-- NOP choices -->
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:1px">碎片数量选择：</div>
+<div class="nop-choices" id="nop-choices"></div>
+
+<!-- Stats -->
+<div class="stat-row">
+  <div class="stat"><div class="stat-k">碎片数</div><div class="stat-v sv-accent" id="sv-nop">—</div></div>
+  <div class="stat"><div class="stat-k">行×列</div><div class="stat-v sv-core" id="sv-grid">—</div></div>
+  <div class="stat"><div class="stat-k">Subject</div><div class="stat-v sv-tab" id="sv-subject">—</div></div>
+  <div class="stat"><div class="stat-k">p × g</div><div class="stat-v sv-remain" id="sv-pg">—</div></div>
+  <div class="stat"><div class="stat-k">S × C</div><div class="stat-v sv-accent" id="sv-sc">—</div></div>
+  <div class="stat"><div class="stat-k">螺旋cols×rows</div><div class="stat-v sv-tab" id="sv-spiral">—</div></div>
+  <div class="stat"><div class="stat-k">已放/总数</div><div class="stat-v sv-remain" id="sv-placed">—</div></div>
+</div>
+
+<!-- Canvas -->
+<div class="canvas-wrap">
+  <canvas id="main-canvas" width="1200" height="720"></canvas>
+</div>
+
+<!-- Log -->
+<div class="log-panel" id="log-panel"></div>
+
+</div><!-- /page -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// Jigex Scatter 布局模拟器 — Opus 46.1 (Fixed)
+// 完整移植 jigex-prog.js 中的 scatter 螺旋矩形布局逻辑
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const $ = id => document.getElementById(id);
+const DPR = window.devicePixelRatio || 1;
+
+// ── Logger ──────────────────────────────────────────────────────────────────
+const logPanel = $('log-panel');
+function log(msg, cls='') {
+  const span = document.createElement('span');
+  span.className = cls ? 'log-' + cls : '';
+  span.textContent = msg + '\n';
+  logPanel.appendChild(span);
+  logPanel.scrollTop = logPanel.scrollHeight;
+}
+function clearLog() { logPanel.innerHTML = ''; }
+
+// ── State ────────────────────────────────────────────────────────���──────────
+let sourceImage = null;
+let canvasW = 1200, canvasH = 720;
+let selectedChoice = null;
+let allChoices = [];
+
+// ── Piece spec generation (simplified from knife.cut) ───────────────────────
+// Simulates piece dimensions: core + edge thicknesses + margin
+const MARGIN = 7;
+
+function generatePieceSpecs(subject, rows, cols, size) {
+  const specs = [];
+  const imgW = subject.width;
+  const imgH = subject.height;
+
+  // Remainder distribution (exactly like jigex)
+  let kW = imgW % size;  // horizontal remainder
+  let kH = imgH % size;  // vertical remainder
+  const CW = Math.floor(kW / cols);
+  const CH = Math.floor(kH / rows);
+  let zW = kW % cols;
+  let zH = kH % rows;
+
+  // Simulate edge thicknesses (~22% of core dimension for tabs)
+  // In real jigex this comes from pixel measurement; we approximate
+  function edgeThickness(coreDim, isBorder, isTab) {
+    if (isBorder) return 0;
+    // Approximation: tab ≈ 22% of core, hole ≈ 18% of core
+    return isTab ? Math.round(coreDim * 0.22) : Math.round(coreDim * 0.18);
+  }
+
+  // Pre-generate tab/hole pattern (simplified alternating)
+  let id = 1;
+  let kWrem = kW, zWrem = zW;
+  let kHrem = kH, zHrem = zH;
+
+  // Reset for row iteration
+  kHrem = kH; zHrem = zH;
+  for (let r = 0; r < rows; r++) {
+    let coreH = size;
+    if (kHrem > 0) { kHrem -= CH; coreH += CH; }
+    if (zHrem > 0) { coreH++; zHrem--; }
+
+    kWrem = kW; zWrem = zW;
+    for (let c = 0; c < cols; c++) {
+      let coreW = size;
+      if (kWrem > 0) { kWrem -= CW; coreW += CW; }
+      if (zWrem > 0) { coreW++; zWrem--; }
+
+      const topBorder = r === 0;
+      const botBorder = r === rows - 1;
+      const leftBorder = c === 0;
+      const rightBorder = c === cols - 1;
+
+      // Alternating tab/hole pattern
+      const topTab = topBorder ? false : ((r + c) % 2 === 0);
+      const leftTab = leftBorder ? false : ((r + c) % 2 === 1);
+      const rightTab = rightBorder ? false : !leftTab;
+      const botTab = botBorder ? false : !topTab;
+
+      const topThick = edgeThickness(coreW, topBorder, topTab);
+      const botThick = edgeThickness(coreW, botBorder, botTab);
+      const leftThick = edgeThickness(coreH, leftBorder, leftTab);
+      const rightThick = edgeThickness(coreH, rightBorder, rightTab);
+
+      const pieceW = leftThick + coreW + rightThick + 2 * MARGIN;
+      const pieceH = topThick + coreH + botThick + 2 * MARGIN;
+
+      const isEdge = topBorder || botBorder || leftBorder || rightBorder;
+
+      specs.push({
+        id: id++,
+        row: r,
+        col: c,
+        core: { width: coreW, height: coreH },
+        width: pieceW,
+        height: pieceH,
+        margin: MARGIN,
+        isEdge: isEdge,
+        // Image bounds (where to sample from source)
+        imgX: 0, imgY: 0, // will be filled
+        sortOrder: Math.random(),
+        hasMoved: false,
+        // Position (filled by scatter)
+        x: 0, y: 0,
+        homeX: 0, homeY: 0,
+      });
+    }
+  }
+
+  // Fill image positions
+  let iy = 0;
+  let idx = 0;
+  for (let r = 0; r < rows; r++) {
+    let ix = 0;
+    for (let c = 0; c < cols; c++) {
+      specs[idx].imgX = ix;
+      specs[idx].imgY = iy;
+      ix += specs[idx].core.width;
+      idx++;
+    }
+    iy += specs[r * cols].core.height;
+  }
+
+  return specs;
+}
+
+// ── cutChoices (from jigex) ─────────────────────────────────────────────────
+function cutChoices(subjectW, subjectH) {
+  const choices = [];
+  let maxSize = Math.floor(Math.max(subjectW, subjectH) / 3);
+
+  while (maxSize > 10) {
+    const rows = Math.floor(subjectH / maxSize);
+    const cols = Math.floor(subjectW / maxSize);
+    const nop = rows * cols;
+    if (nop >= 6) {
+      choices.push({ nop, rows, cols, size: maxSize });
+    }
+    if (nop >= 1000) break;
+
+    const s1 = Math.floor(subjectH / (rows + 1));
+    const s2 = Math.floor(subjectW / (cols + 1));
+    maxSize = Math.max(s1, s2);
+  }
+  return choices;
+}
+
+// ── Subject scaling (from jigex _.Subject.rescale) ──────────────────────────
+function scaleSubject(srcW, srcH, cnvW, cnvH) {
+  let w = srcW, h = srcH;
+  let area = w * h;
+  const cnvArea = cnvW * cnvH;
+  const Me = 0.9; // max fraction of canvas dimension
+  let scale = 1;
+  let shrunk = false;
+
+  // Shrink if too large
+  while (area / cnvArea > 0.35 || w > cnvW * Me || h > cnvH * Me) {
+    scale -= 0.01;
+    w = srcW * scale;
+    h = srcH * scale;
+    area = w * h;
+    shrunk = true;
+  }
+  // Grow if too small
+  if (!shrunk) {
+    while (area / cnvArea < 0.35 && w < cnvW * Me && h < cnvH * Me) {
+      scale += 0.01;
+      w = srcW * scale;
+      h = srcH * scale;
+      area = w * h;
+    }
+  }
+
+  return {
+    width: Math.round(w),
+    height: Math.round(h),
+    scale: scale
+  };
+}
+
+// ── Scatter sequence (from jigex getScatterSequence) ────────────────────────
+function getScatterSequence(specs) {
+  // Sort by sortOrder, then try to avoid placing neighbors consecutively
+  const sorted = specs.slice().sort((a, b) => a.sortOrder - b.sortOrder);
+  const seq = [];
+  const remaining = sorted.slice();
+
+  while (remaining.length > 0) {
+    seq.push(remaining.pop());
+  }
+  return seq;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCATTER — Complete port from jigex-prog.js
+// ═══════════════════════════════════════════════════════════════════════════════
+function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
+  const totalPieces = specs.length;
+  log(`scatter 开始: ${totalPieces} 碎片, 画布 ${cnvW}×${cnvH}`, 'info');
+
+  // ── Step 1: Compute reference piece dimensions p and g ──
+  const h = 2 * MARGIN; // = 14
+  let pSum = 0, gSum = 0;
+  specs.forEach(s => {
+    pSum += s.width - h;
+    gSum += s.height - h;
+  });
+  const p = pSum * 1.05 / totalPieces;  // average net width × 1.05
+  const g = gSum * 1.05 / totalPieces;  // average net height × 1.05
+  log(`参考碎片尺寸: p=${p.toFixed(1)}, g=${g.toFixed(1)}`, 'info');
+
+  // ── Step 2: Compute grid dimensions ──
+  // b = left offset (iOS safe area, 0 for web)
+  const b = 0;
+  const w = (cnvW - b) / p;  // float column count
+  const P = cnvH / g;         // float row count
+
+  // Round: if fractional part >= 0.5, round up
+  const E = (w - Math.floor(w)) >= 0.5 ? 1 : 0;
+  const k = (P - Math.floor(P)) >= 0.5 ? 1 : 0;
+
+  const gridCols = Math.floor(w) + E;
+  const gridRows = Math.floor(P) + k;
+
+  // ── Step 3: Compute cell sizes S and C ──
+  const S = p * (w / gridCols);  // = canvasW / gridCols (exactly fills canvas)
+  const C = g * (P / gridRows);  // = canvasH / gridRows
+
+  log(`格子: w=${w.toFixed(2)}, P=${P.toFixed(2)}, E=${E}, k=${k}`, 'info');
+  log(`格子尺寸: S=${S.toFixed(1)}, C=${C.toFixed(1)}, cols=${gridCols}, rows=${gridRows}`, 'info');
+
+  $('sv-pg').textContent = `${p.toFixed(0)}×${g.toFixed(0)}`;
+  $('sv-sc').textContent = `${S.toFixed(0)}×${C.toFixed(0)}`;
+  $('sv-spiral').textContent = `${gridCols}×${gridRows}`;
+
+  // ── Step 4: Scatter sequence ──
+  const sequence = getScatterSequence(specs);
+  const toPlace = sequence.slice(); // pieces to scatter (all unmoved)
+
+  // ── Step 5: Subject collision rect (center of canvas) ──
+  const subCenterX = cnvW / 2;
+  const subCenterY = cnvH / 2;
+  const subLeft = subCenterX - subjectW / 2;
+  const subRight = subCenterX + subjectW / 2;
+  const subTop = subCenterY - subjectH / 2;
+  const subBot = subCenterY + subjectH / 2;
+
+  // Already-placed pieces (for collision detection) — groups etc.
+  // In our simulation, there are no pre-placed groups, so B is empty
+  const placedPieces = [];
+
+  // ── Step 6: Spiral placement (exact port from jigex) ──
+  // Starting position and boundaries
+  let I = b + p / 2;        // current X (center of cell)
+  let L = g / 2;             // current Y (center of cell)
+  const canvasRight = cnvW;  // right boundary
+  let A = C;                 // top boundary (starts at first row bottom)
+  const canvasBottom = cnvH; // bottom boundary
+
+  let direction = 3; // start going RIGHT (3=right, 1=down, 2=left, 0=up)
+
+  // Track spiral boundaries (shrink inward as we spiral)
+  let spiralRight = cnvW;
+  let spiralBottom = cnvH;
+  let spiralLeft = b;
+  let spiralTop = C;
+
+  // Counters for spiral layer tracking
+  let N = 999; // vertical layers remaining
+  let R = 999; // horizontal layers remaining
+
+  let placedCount = 0;
+  let maxIterations = totalPieces * 50; // safety valve
+  let iterations = 0;
+
+  while (toPlace.length > 0 && iterations < maxIterations) {
+    iterations++;
+    const piece = toPlace[toPlace.length - 1]; // peek at top
+
+    // ── Collision check: would this position overlap the subject? ──
+    const pw2 = piece.width / 4;  // quarter-width for rough check
+    const ph2 = piece.height / 4;
+    let hitsSubject = false;
+    if (I - pw2 < subRight && I + pw2 > subLeft &&
+        L - ph2 < subBot && L + ph2 > subTop) {
+      hitsSubject = true;
+    }
+
+    // ── Collision check: overlap with already-placed pieces ─���
+    let hitsPlaced = false;
+    for (let pi = placedPieces.length - 1; pi >= 0; pi--) {
+      const other = placedPieces[pi];
+      const ow = (piece.width / 2 + other.width / 2);
+      const oh = (piece.height / 2 + other.height / 2);
+      if (Math.abs(I - other.x) < ow && Math.abs(L - other.y) < oh) {
+        hitsPlaced = true;
+        break;
+      }
+    }
+
+    const blocked = hitsSubject || hitsPlaced;
+
+    // ── Can place here? Position must be within spiral boundaries ──
+    const canPlace = !blocked && (
+      (direction === 3 && N > 0) ||
+      (direction === 1 && R > 0) ||  // down, need horizontal layers
+      (direction === 2 && N > 0) ||
+      (direction === 0 && R > 0)     // up, need horizontal layers
+    );
+
+    if (canPlace) {
+      // Place the piece!
+      toPlace.pop();
+      const jitterX = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * p * 0.0625;
+      const jitterY = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * g * 0.0625;
+      piece.x = I + jitterX;
+      piece.y = L + jitterY;
+      piece.homeX = piece.x;
+      piece.homeY = piece.y;
+      placedPieces.push(piece);
+      placedCount++;
+    }
+
+    // ── Advance cursor along current direction ──
+    const stepW = blocked ? S / 2 : S;  // half-step when blocked (to try nearby)
+    const stepH = blocked ? C / 2 : C;
+
+    let f, v; // next position candidates
+    switch (direction) {
+      case 3: // RIGHT
+        f = I + stepW;
+        if (f > spiralRight - p / 4) {
+          // Hit right wall → turn DOWN
+          direction = 1;
+          N--;
+          I = spiralRight - p / 2;
+          if (canPlace) L += C;
+          if (R > 0) spiralRight -= S;
+        } else {
+          I = f;
+        }
+        break;
+
+      case 1: // DOWN
+        v = L + stepH;
+        if (v > spiralBottom - g / 4) {
+          // Hit bottom wall → turn LEFT
+          direction = 2;
+          R--;
+          L = spiralBottom - g / 2;
+          if (canPlace) I -= S;
+          if (N > 0) spiralBottom -= C;
+        } else {
+          L = v;
+        }
+        break;
+
+      case 2: // LEFT
+        f = I - stepW;
+        if (f < spiralLeft + p / 4) {
+          // Hit left wall → turn UP
+          direction = 0;
+          N--;
+          I = spiralLeft + p / 2;
+          if (canPlace) L -= C;
+          if (R > 0) spiralLeft += S;
+        } else {
+          I = f;
+        }
+        break;
+
+      case 0: // UP
+        v = L - stepH;
+        if (v < spiralTop + g / 4) {
+          // Hit top wall → turn RIGHT
+          direction = 3;
+          R--;
+          L = spiralTop + g / 2;
+          if (canPlace) I += S;
+          if (N > 0) spiralTop += C;
+        } else {
+          L = v;
+        }
+        break;
+    }
+  }
+
+  // ── Clamp all pieces to canvas bounds ──
+  placedPieces.forEach(pc => {
+    const hw = pc.width / 2;
+    const hh = pc.height / 2;
+    if (pc.x - hw < 0) pc.x = hw;
+    if (pc.x + hw > cnvW) pc.x = cnvW - hw;
+    if (pc.y - hh < 0) pc.y = hh;
+    if (pc.y + hh > cnvH) pc.y = cnvH - hh;
+  });
+
+  if (toPlace.length > 0) {
+    log(`⚠ ${toPlace.length} 碎片未能放置，执行回退布局`, 'warn');
+    // Fallback: place remaining pieces in a grid around the edges
+    toPlace.forEach((piece, i) => {
+      const angle = (i / toPlace.length) * Math.PI * 2;
+      const radius = Math.min(cnvW, cnvH) * 0.4;
+      piece.x = cnvW / 2 + Math.cos(angle) * radius;
+      piece.y = cnvH / 2 + Math.sin(angle) * radius;
+      // Clamp
+      const hw = piece.width / 2;
+      const hh = piece.height / 2;
+      piece.x = Math.max(hw, Math.min(cnvW - hw, piece.x));
+      piece.y = Math.max(hh, Math.min(cnvH - hh, piece.y));
+      placedPieces.push(piece);
+      placedCount++;
+    });
+  }
+
+  log(`scatter 完成: 放置 ${placedCount}/${totalPieces} 碎片 (${iterations} 迭代)`, 'ok');
+  $('sv-placed').textContent = `${placedCount}/${totalPieces}`;
+
+  return placedPieces;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Drawing
+// ═══════════════════════════════════════════════════════════════════════════════
+function drawLayout(specs, cnvW, cnvH, subject, subjectImg) {
+  const canvas = $('main-canvas');
+  canvas.width = cnvW * DPR;
+  canvas.height = cnvH * DPR;
+  canvas.style.width = '100%';
+  canvas.style.height = 'auto';
+  const cx = canvas.getContext('2d');
+  cx.scale(DPR, DPR);
+
+  // ── Background ──
+  cx.fillStyle = '#1a1a2e';
+  cx.fillRect(0, 0, cnvW, cnvH);
+
+  // ── Grid lines (faint) ──
+  cx.save();
+  cx.strokeStyle = 'rgba(255,255,255,0.04)';
+  cx.lineWidth = 0.5;
+  // We don't draw the scatter grid since it's internal
+  cx.restore();
+
+  // ── Subject area (center, semi-transparent) ──
+  if (subjectImg) {
+    const sx = (cnvW - subject.width) / 2;
+    const sy = (cnvH - subject.height) / 2;
+    cx.save();
+    cx.globalAlpha = 0.15;
+    cx.drawImage(subjectImg, sx, sy, subject.width, subject.height);
+    cx.restore();
+
+    // Subject border
+    cx.save();
+    cx.strokeStyle = 'rgba(99,102,241,0.4)';
+    cx.lineWidth = 1.5;
+    cx.setLineDash([6, 4]);
+    cx.strokeRect(sx, sy, subject.width, subject.height);
+    cx.restore();
+
+    // Label
+    cx.save();
+    cx.font = '11px JetBrains Mono';
+    cx.fillStyle = 'rgba(99,102,241,0.6)';
+    cx.textAlign = 'center';
+    cx.fillText(`Subject ${subject.width}×${subject.height}`, cnvW / 2, sy - 6);
+    cx.restore();
+  }
+
+  // ── Draw pieces ──
+  const colors = [
+    'rgba(59,130,246,0.5)',   // blue
+    'rgba(245,158,11,0.5)',   // amber
+    'rgba(16,185,129,0.5)',   // green
+    'rgba(168,85,247,0.5)',   // purple
+    'rgba(239,68,68,0.4)',    // red
+    'rgba(99,102,241,0.5)',   // indigo
+  ];
+  const strokes = [
+    'rgba(59,130,246,0.8)',
+    'rgba(245,158,11,0.8)',
+    'rgba(16,185,129,0.8)',
+    'rgba(168,85,247,0.8)',
+    'rgba(239,68,68,0.7)',
+    'rgba(99,102,241,0.8)',
+  ];
+
+  specs.forEach((pc, i) => {
+    const pw = pc.width;
+    const ph = pc.height;
+    const px = pc.x - pw / 2;
+    const py = pc.y - ph / 2;
+    const ci = i % colors.length;
+
+    // Piece rect
+    cx.save();
+    cx.fillStyle = colors[ci];
+    cx.strokeStyle = strokes[ci];
+    cx.lineWidth = 1;
+    cx.beginPath();
+    if (cx.roundRect) cx.roundRect(px, py, pw, ph, 3);
+    else cx.rect(px, py, pw, ph);
+    cx.fill();
+    cx.stroke();
+    cx.restore();
+
+    // Core rect (inner)
+    const coreX = px + pc.margin + Math.round(pc.core.height * 0.18); // approx left thickness
+    const coreY = py + pc.margin + Math.round(pc.core.width * 0.18);  // approx top thickness
+    cx.save();
+    cx.strokeStyle = 'rgba(255,255,255,0.15)';
+    cx.lineWidth = 0.5;
+    cx.setLineDash([2, 2]);
+    cx.strokeRect(coreX, coreY, pc.core.width, pc.core.height);
+    cx.restore();
+
+    // Piece ID label
+    cx.save();
+    cx.font = `${Math.min(pw / 3, 11)}px JetBrains Mono`;
+    cx.fillStyle = 'rgba(255,255,255,0.7)';
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    cx.fillText(pc.id, pc.x, pc.y);
+    cx.restore();
+  });
+
+  // ── Canvas border ──
+  cx.save();
+  cx.strokeStyle = 'rgba(255,255,255,0.1)';
+  cx.lineWidth = 2;
+  cx.strokeRect(0, 0, cnvW, cnvH);
+  cx.restore();
+
+  // ── Piece count annotation ──
+  cx.save();
+  cx.font = '12px JetBrains Mono';
+  cx.fillStyle = 'rgba(255,255,255,0.3)';
+  cx.textAlign = 'right';
+  cx.fillText(`${specs.length} pieces`, cnvW - 10, cnvH - 8);
+  cx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Main pipeline
+// ═══════════════════════════════════════════════════════════════════════════════
+function runPipeline() {
+  clearLog();
+  log('═══ 开始布局计算 ═══', 'info');
+
+  if (!sourceImage) {
+    log('请先上传图片', 'err');
+    return;
+  }
+  if (!selectedChoice) {
+    log('请先选择碎片数量', 'err');
+    return;
+  }
+
+  const srcW = sourceImage.naturalWidth;
+  const srcH = sourceImage.naturalHeight;
+  log(`原始图片: ${srcW}×${srcH}`);
+
+  // Scale subject
+  const subject = scaleSubject(srcW, srcH, canvasW, canvasH);
+  log(`Subject 缩放: ${subject.width}×${subject.height} (scale=${subject.scale.toFixed(3)})`, 'info');
+  $('sv-subject').textContent = `${subject.width}×${subject.height}`;
+
+  // Selected choice
+  const choice = selectedChoice;
+  log(`选中方案: ${choice.nop}片, ${choice.rows}行×${choice.cols}列, size=${choice.size}`);
+  $('sv-nop').textContent = choice.nop;
+  $('sv-grid').textContent = `${choice.rows}×${choice.cols}`;
+
+  // Generate piece specs
+  const specs = generatePieceSpecs(subject, choice.rows, choice.cols, choice.size);
+  log(`切割完成: ${specs.length}块碎片`, 'ok');
+
+  // Run scatter
+  const placed = scatter(specs, canvasW, canvasH, subject.width, subject.height);
+
+  // Draw
+  drawLayout(placed, canvasW, canvasH, subject, sourceImage);
+
+  log('═══ 布局完成 ═══', 'ok');
+}
+
+// ── NOP choices UI ──────────────────────────────────────────────────────────
+function updateNopChoices() {
+  const container = $('nop-choices');
+  container.innerHTML = '';
+  allChoices = [];
+  selectedChoice = null;
+
+  if (!sourceImage) return;
+
+  const subject = scaleSubject(
+    sourceImage.naturalWidth, sourceImage.naturalHeight,
+    canvasW, canvasH
+  );
+  allChoices = cutChoices(subject.width, subject.height);
+
+  // Default selection: closest to 100 or first >= 20
+  let defaultIdx = 0;
+  let minDiff = Infinity;
+  allChoices.forEach((ch, i) => {
+    const diff = Math.abs(ch.nop - 100);
+    if (diff < minDiff) { minDiff = diff; defaultIdx = i; }
+  });
+
+  allChoices.forEach((ch, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'nop-btn';
+    btn.textContent = `${ch.nop}片 (${ch.rows}×${ch.cols})`;
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nop-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedChoice = ch;
+      runPipeline();
+    });
+    if (i === defaultIdx) {
+      btn.classList.add('selected');
+      selectedChoice = ch;
+    }
+    container.appendChild(btn);
+  });
+}
+
+// ── Event handlers ──────────────────────────────────────────────────────────
+$('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    sourceImage = img;
+    updateNopChoices();
+    runPipeline();
+  };
+  img.src = URL.createObjectURL(file);
+});
+
+$('sl-cw').addEventListener('input', e => {
+  canvasW = +e.target.value;
+  $('vl-cw').textContent = canvasW;
+});
+$('sl-ch').addEventListener('input', e => {
+  canvasH = +e.target.value;
+  $('vl-ch').textContent = canvasH;
+});
+
+$('btn-run').addEventListener('click', () => {
+  if (sourceImage) {
+    updateNopChoices();
+    runPipeline();
+  }
+});
+
+// ── Init: draw empty canvas ──
+(function() {
+  const canvas = $('main-canvas');
+  canvas.width = canvasW * DPR;
+  canvas.height = canvasH * DPR;
+  const cx = canvas.getContext('2d');
+  cx.scale(DPR, DPR);
+  cx.fillStyle = '#1a1a2e';
+  cx.fillRect(0, 0, canvasW, canvasH);
+  cx.font = '16px Noto Serif SC';
+  cx.fillStyle = 'rgba(255,255,255,0.2)';
+  cx.textAlign = 'center';
+  cx.fillText('上传图片以开始', canvasW / 2, canvasH / 2);
+})();
+</script>
+</body>
+</html>
