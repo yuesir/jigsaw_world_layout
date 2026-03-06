@@ -487,10 +487,11 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
   // ── Step 5: Subject collision rect (center of canvas) ──
   const subCenterX = cnvW / 2;
   const subCenterY = cnvH / 2;
-  const subLeft = subCenterX - subjectW / 2;
-  const subRight = subCenterX + subjectW / 2;
-  const subTop = subCenterY - subjectH / 2;
-  const subBot = subCenterY + subjectH / 2;
+  const subjectMargin = 10; // Add margin around subject to prevent pieces from getting too close
+  const subLeft = subCenterX - subjectW / 2 - subjectMargin;
+  const subRight = subCenterX + subjectW / 2 + subjectMargin;
+  const subTop = subCenterY - subjectH / 2 - subjectMargin;
+  const subBot = subCenterY + subjectH / 2 + subjectMargin;
 
   // Already-placed pieces (for collision detection) — groups etc.
   // In our simulation, there are no pre-placed groups, so B is empty
@@ -525,20 +526,21 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
     const piece = toPlace[toPlace.length - 1]; // peek at top
 
     // ── Collision check: would this position overlap the subject? ──
-    const pw2 = piece.width / 4;  // quarter-width for rough check
-    const ph2 = piece.height / 4;
+    const pw2 = piece.width / 2;  // half-width for proper collision check
+    const ph2 = piece.height / 2;  // half-height for proper collision check
     let hitsSubject = false;
     if (I - pw2 < subRight && I + pw2 > subLeft &&
         L - ph2 < subBot && L + ph2 > subTop) {
       hitsSubject = true;
     }
 
-    // ── Collision check: overlap with already-placed pieces ─���
+    // ── Collision check: overlap with already-placed pieces ──
     let hitsPlaced = false;
     for (let pi = placedPieces.length - 1; pi >= 0; pi--) {
       const other = placedPieces[pi];
-      const ow = (piece.width / 2 + other.width / 2);
-      const oh = (piece.height / 2 + other.height / 2);
+      const margin = 5; // Add small margin between pieces to prevent overlap
+      const ow = (piece.width / 2 + other.width / 2 + margin);
+      const oh = (piece.height / 2 + other.height / 2 + margin);
       if (Math.abs(I - other.x) < ow && Math.abs(L - other.y) < oh) {
         hitsPlaced = true;
         break;
@@ -576,7 +578,7 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
     switch (direction) {
       case 3: // RIGHT
         f = I + stepW;
-        if (f > spiralRight - p / 4) {
+        if (f > spiralRight - p / 2) {
           // Hit right wall → turn DOWN
           direction = 1;
           N--;
@@ -590,7 +592,7 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
 
       case 1: // DOWN
         v = L + stepH;
-        if (v > spiralBottom - g / 4) {
+        if (v > spiralBottom - g / 2) {
           // Hit bottom wall → turn LEFT
           direction = 2;
           R--;
@@ -604,7 +606,7 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
 
       case 2: // LEFT
         f = I - stepW;
-        if (f < spiralLeft + p / 4) {
+        if (f < spiralLeft + p / 2) {
           // Hit left wall → turn UP
           direction = 0;
           N--;
@@ -618,7 +620,7 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
 
       case 0: // UP
         v = L - stepH;
-        if (v < spiralTop + g / 4) {
+        if (v < spiralTop + g / 2) {
           // Hit top wall → turn RIGHT
           direction = 3;
           R--;

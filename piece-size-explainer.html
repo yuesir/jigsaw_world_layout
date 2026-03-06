@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>碎片宽高是怎么确定的</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&display=swap');
+
+:root {
+  --bg:      #f5f3ee;
+  --paper:   #faf9f6;
+  --ink:     #1a1814;
+  --muted:   #8a8478;
+  --rule:    #ddd9d0;
+  --rule2:   #e8e4dc;
+
+  --step1:   #2d5a8e;   /* cutChoices – blue */
+  --step2:   #7b3f8c;   /* core.width  – purple */
+  --step3:   #c05a1a;   /* thickness   – orange */
+  --step4:   #1e7a4a;   /* margin      – green */
+  --step5:   #8b1a1a;   /* final width – red */
+
+  --s1bg: #eef4fb; --s1b: #b3cde8;
+  --s2bg: #f4eef8; --s2b: #d4b3e8;
+  --s3bg: #fdf1e8; --s3b: #f0c49a;
+  --s4bg: #eef8f2; --s4b: #9fd4b8;
+  --s5bg: #fdf0f0; --s5b: #f0b3b3;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--ink); font-family: 'DM Mono', monospace; }
+
+.page { max-width: 960px; margin: 0 auto; padding: 48px 32px 96px; }
+
+/* ── HERO ── */
+.hero { margin-bottom: 56px; }
+.hero-label {
+  font-size: 10px; letter-spacing: 4px; color: var(--muted);
+  text-transform: uppercase; margin-bottom: 14px;
+}
+.hero h1 {
+  font-family: 'Instrument Serif', serif;
+  font-size: 40px; line-height: 1.15; margin-bottom: 14px;
+  font-weight: 400;
+}
+.hero h1 em { font-style: italic; color: var(--step5); }
+.hero-sub { font-size: 13px; color: var(--muted); line-height: 1.9; max-width: 560px; }
+
+/* ── SECTION ── */
+.section { margin-bottom: 60px; }
+.step-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 3px; margin-bottom: 14px; font-weight: 500;
+}
+.sec-title {
+  font-family: 'Instrument Serif', serif;
+  font-size: 24px; font-weight: 400; margin-bottom: 10px; line-height: 1.3;
+}
+.prose { font-size: 13px; color: #4a4640; line-height: 1.95; margin-bottom: 14px; }
+.prose strong { color: var(--ink); font-weight: 500; }
+.prose code {
+  font-family: 'DM Mono', monospace; font-size: 11px;
+  background: var(--rule2); padding: 1px 5px; border-radius: 2px;
+}
+
+/* code block */
+.code {
+  background: #1c1a17; color: #d4cfc4;
+  font-family: 'DM Mono', monospace; font-size: 12px; line-height: 1.85;
+  padding: 16px 20px; border-radius: 6px; margin: 12px 0;
+  overflow-x: auto;
+}
+.ck { color: #a78bfa; }
+.cv { color: #6ee7b7; }
+.cc { color: #6b7280; }
+.co { color: #fbbf24; }
+.cs { color: #f87171; }
+
+/* viz card */
+.viz {
+  background: var(--paper); border: 1px solid var(--rule);
+  border-radius: 10px; padding: 28px 24px; margin: 14px 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.viz canvas { display: block; margin: 0 auto; }
+.viz-cap {
+  font-size: 10px; color: var(--muted); text-align: center;
+  margin-top: 10px; letter-spacing: 1px;
+}
+
+/* callout */
+.callout {
+  border-left: 3px solid var(--ink); background: var(--rule2);
+  padding: 12px 16px; margin: 12px 0;
+  font-size: 12px; line-height: 1.85; color: #4a4640;
+}
+.callout strong { color: var(--ink); }
+
+/* hbox */
+.hbox {
+  border-radius: 6px; padding: 12px 16px; margin: 10px 0;
+  font-size: 12px; line-height: 1.85;
+}
+
+/* slider control */
+.ctrl {
+  background: var(--rule2); border: 1px solid var(--rule);
+  border-radius: 8px; padding: 14px 18px;
+  display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+  margin: 12px 0;
+}
+.cg { display: flex; align-items: center; gap: 10px; }
+.cl { font-size: 10px; letter-spacing: 1px; color: var(--muted); min-width: 72px; }
+.cg input[type=range] { width: 120px; accent-color: var(--ink); }
+.cv-num { font-size: 14px; font-weight: 500; color: var(--ink); min-width: 40px; }
+
+/* formula */
+.formula {
+  background: var(--paper); border: 2px solid var(--ink);
+  border-radius: 8px; padding: 20px 24px; margin: 16px 0;
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 10px; font-size: 15px;
+}
+.ft { display: flex; align-items: center; gap: 6px; }
+.fb { padding: 6px 12px; border-radius: 5px; font-weight: 500; font-size: 13px; }
+.fop { font-size: 18px; color: var(--muted); font-weight: 300; }
+
+/* stats row */
+.stats { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.stat {
+  flex: 1; min-width: 100px;
+  border: 1px solid var(--rule); border-radius: 6px;
+  padding: 10px 14px; background: var(--paper);
+}
+.sk { font-size: 9px; letter-spacing: 1px; color: var(--muted); margin-bottom: 4px; }
+.sv { font-size: 18px; font-weight: 500; }
+
+/* divider */
+.divider { border: none; border-top: 1px solid var(--rule); margin: 48px 0; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ══ HERO ══════════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="hero-label">Jigex 引擎图解 · 第四篇</div>
+  <h1>碎片宽高是<em>怎么确定的</em></h1>
+  <p class="hero-sub">
+    一块碎片的最终宽度，由四个独立部分叠加而成。
+    其中三个来自切割算法，一个来自固定的 margin 常量。
+    理解这四层，就理解了碎片的全部几何结构。
+  </p>
+</div>
+
+<!-- ══ OVERVIEW ══════════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="viz" id="overviewViz">
+    <canvas id="c-overview" width="840" height="170"></canvas>
+    <div class="viz-cap">piece.width 的四个组成部分（点击各色块查看详细说明）</div>
+  </div>
+
+  <div class="formula">
+    <div class="ft">
+      <div class="fb" style="background:var(--s4bg);color:var(--step4);border:1.5px solid var(--s4b)">margin 7px</div>
+      <div class="fop">+</div>
+      <div class="fb" style="background:var(--s3bg);color:var(--step3);border:1.5px solid var(--s3b)">left.thickness</div>
+      <div class="fop">+</div>
+      <div class="fb" style="background:var(--s2bg);color:var(--step2);border:1.5px solid var(--s2b)">core.width</div>
+      <div class="fop">+</div>
+      <div class="fb" style="background:var(--s3bg);color:var(--step3);border:1.5px solid var(--s3b)">right.thickness</div>
+      <div class="fop">+</div>
+      <div class="fb" style="background:var(--s4bg);color:var(--step4);border:1.5px solid var(--s4b)">margin 7px</div>
+      <div class="fop">=</div>
+      <div class="fb" style="background:var(--s5bg);color:var(--step5);border:2px solid var(--s5b);font-size:15px">piece.width</div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ══ STEP 1: cutChoices ════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="step-badge" style="background:var(--s1bg);color:var(--step1);border:1px solid var(--s1b)">▸ 第一步</div>
+  <div class="sec-title">cutChoices：从碎片数量推算 size</div>
+  <p class="prose">
+    用户选择碎片数量后（如 100 片），程序需要决定把图片切成几行几列，每格多宽。
+    这一步产生核心参数 <strong>size</strong>——每个碎片核心区的基准边长。
+  </p>
+
+  <div class="code">
+<span class="cc">// 从图片短边出发，逐步减小 size 枚举所有合法切法</span>
+m = floor(max(imgW, imgH) / 3)   <span class="cc">// 起始：图片最长边的 1/3</span>
+<span class="ck">while</span> (m > 10) {
+  rows = floor(imgH / m)
+  cols = floor(imgW / m)
+  nop  = rows × cols            <span class="cc">// 该 size 能切出的碎片总数</span>
+  <span class="ck">if</span> (nop >= minNop) push({nop, rows, cols, <span class="co">size: m</span>})
+  <span class="cc">// 缩小 size：使行数或列数各增加1</span>
+  s = floor(imgH / (rows+1))
+  l = floor(imgW / (cols+1))
+  m = max(s, l)                 <span class="cc">// 取较大值，确保两个方向都+1</span>
+}
+</div>
+
+  <div class="ctrl">
+    <div class="cg">
+      <span class="cl">图片宽</span>
+      <input type="range" id="sl-imgW" min="200" max="1600" value="800" step="10">
+      <span class="cv-num" id="vl-imgW">800</span><span style="font-size:10px;color:var(--muted)">px</span>
+    </div>
+    <div class="cg">
+      <span class="cl">图片高</span>
+      <input type="range" id="sl-imgH" min="200" max="1600" value="600" step="10">
+      <span class="cv-num" id="vl-imgH">600</span><span style="font-size:10px;color:var(--muted)">px</span>
+    </div>
+    <div class="cg">
+      <span class="cl">碎片数</span>
+      <input type="range" id="sl-nop" min="6" max="500" value="100" step="1">
+      <span class="cv-num" id="vl-nop">100</span><span style="font-size:10px;color:var(--muted)">片</span>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="sk">ROWS 行数</div><div class="sv" id="sv-rows" style="color:var(--step1)">—</div></div>
+    <div class="stat"><div class="sk">COLS 列数</div><div class="sv" id="sv-cols" style="color:var(--step1)">—</div></div>
+    <div class="stat"><div class="sk">SIZE 基准边长</div><div class="sv" id="sv-size" style="color:var(--step2)">—</div></div>
+    <div class="stat"><div class="sk">实际碎片数</div><div class="sv" id="sv-actual">—</div></div>
+  </div>
+
+  <div class="viz">
+    <canvas id="c-cut" width="840" height="220"></canvas>
+    <div class="viz-cap">蓝色网格 = cutChoices 切割方案　每格大小 = size × size</div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ══ STEP 2: core.width 余数均摊 ═══════════════════════════════════════════ -->
+<div class="section">
+  <div class="step-badge" style="background:var(--s2bg);color:var(--step2);border:1px solid var(--s2b)">▸ 第二步</div>
+  <div class="sec-title">core.width：余数均摊，差值最多 1px</div>
+  <p class="prose">
+    图片宽度往往不能被 cols 整除。<code>size × cols</code> 通常比图片宽少几个像素，
+    这个余数需要均摊到各列，保证所有碎片的核心区域拼在一起恰好等于图片宽度，无缝隙。
+  </p>
+
+  <div class="code">
+k = imgW % size         <span class="cc">// 横向总余数</span>
+C = floor(k / cols)     <span class="cc">// 每列均摊几px（通常=0，因 k < cols）</span>
+z = k % cols            <span class="cc">// 还剩几px，逐列 +1 消化</span>
+
+<span class="ck">for each</span> column:
+  y = size              <span class="cc">// 先赋基础值</span>
+  <span class="ck">if</span> (k > 0) { k -= C; y += C }   <span class="cc">// 加均摊量</span>
+  <span class="ck">if</span> (z > 0) { y++; z-- }         <span class="cc">// 前 z 列各 +1</span>
+  core.width = y        <span class="cc">// ← 该列每块碎片的核心宽度</span>
+</div>
+
+  <div class="viz">
+    <canvas id="c-core" width="840" height="160"></canvas>
+    <div class="viz-cap">各列 core.width 分布——差值最多 1px，所有列之和 = 图片宽度</div>
+  </div>
+
+  <div class="callout">
+    <strong>行方向同理：</strong>core.height 按 <code>imgH % rows</code> 做相同均摊。
+    结果是前几行高 size+1，其余行高 size，所有行加总恰好等于图片高度。
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ══ STEP 3: thickness ═════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="step-badge" style="background:var(--s3bg);color:var(--step3);border:1px solid var(--s3b)">▸ 第三步</div>
+  <div class="sec-title">edges.thickness：像素测量锯齿厚度</div>
+  <p class="prose">
+    碎片的四条边各有一个凸起（tab）或凹口（hole），其伸出/缩进的像素厚度
+    不是固定值，而是根据 core.width 实时在隐藏 canvas 上绘制并测量得到的。
+  </p>
+
+  <p class="prose">
+    <strong>为什么要实时测量？</strong>
+    锯齿轮廓是贝塞尔曲线，相同的控制点在不同的 core.width 下，
+    绘制出来的像素厚度比例略有差异。用像素测量代替公式计算，是唯一精确的方法。
+  </p>
+
+  <div class="code">
+<span class="cc">// buildMask 初始化阶段，对每个 core.width 值执行一次</span>
+canvas.width  = core.width
+canvas.height = core.width
+<span class="cc">// 1. 绘制一段贝塞尔锯齿曲线</span>
+drawBezierEdge(side, tab=<span class="ck">false</span>)
+<span class="cc">// 2. 读像素，从边缘向内扫，数出非零像素的行数</span>
+imageData = getImageData(0, 0, w, h)
+g = countFilledPixels(imageData, side)
+<span class="cc">// 3. 存入查表数组（之后直接 O(1) 查询）</span>
+tabHeights[side][core.width]  = g   <span class="cc">// tab 的厚度</span>
+holeHeights[side][core.width] = g   <span class="cc">// hole 的厚度</span>
+</div>
+
+  <div class="viz">
+    <canvas id="c-thickness" width="840" height="260"></canvas>
+    <div class="viz-cap">左：tab（凸起）　右：hole（凹口）　橙色区域 = thickness（以 core.width 为变量）</div>
+  </div>
+
+  <div class="ctrl">
+    <div class="cg">
+      <span class="cl">core.width</span>
+      <input type="range" id="sl-cw" min="20" max="120" value="60" step="1">
+      <span class="cv-num" id="vl-cw">60</span><span style="font-size:10px;color:var(--muted)">px</span>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="sk">tab thickness ≈</div><div class="sv" id="sv-tab" style="color:var(--step3)">—</div></div>
+    <div class="stat"><div class="sk">hole thickness ≈</div><div class="sv" id="sv-hole" style="color:var(--step3)">—</div></div>
+    <div class="stat"><div class="sk">thickness / core.width</div><div class="sv" id="sv-ratio" style="color:var(--muted)">≈ 22%</div></div>
+  </div>
+
+  <div class="callout">
+    <strong>相邻碎片必须互补：</strong>
+    若左边碎片的 right 边是 tab（凸），右边碎片的 left 边必须是 hole（凹）。
+    这由 <code>edge.tab = !neighbor.edge.tab</code> 保证，切割时自动分配。
+  </div>
+
+  <!-- 邻居互补示意 -->
+  <div class="viz">
+    <canvas id="c-complement" width="840" height="130"></canvas>
+    <div class="viz-cap">相邻碎片边缘必须一凸一凹，确保能拼合</div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ══ STEP 4: margin ════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="step-badge" style="background:var(--s4bg);color:var(--step4);border:1px solid var(--s4b)">▸ 第四步</div>
+  <div class="sec-title">margin：固定的 7px 安全区</div>
+  <p class="prose">
+    每条边外侧还有 <strong>7px</strong> 的 margin（源码常量 <code>bounds.margin = 7</code>）。
+    左右各一个，宽度公式里加 <code>2 × 7 = 14</code>。
+    这个区域用于存放阴影、斜面高光等渲染效果，防止锯齿被裁切。
+  </p>
+
+  <div class="code">
+y = bounds.margin   <span class="cc">// y = 7（固定常量）</span>
+piece.width  = O.thickness + j + A.thickness + 2*y
+piece.height = L.thickness + B + M.thickness + 2*y
+<span class="cc">//  O=left  j=core.width  A=right  L=top  B=core.height  M=bottom</span>
+</div>
+</div>
+
+<hr class="divider">
+
+<!-- ══ FINAL: 全图综合 ═══════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="step-badge" style="background:var(--s5bg);color:var(--step5);border:1px solid var(--s5b)">▸ 综合</div>
+  <div class="sec-title">完整的碎片结构图</div>
+  <p class="prose">
+    拖动滑块，实时看到四个部分如何叠加成最终的 piece.width。
+  </p>
+
+  <div class="ctrl">
+    <div class="cg">
+      <span class="cl">core.width</span>
+      <input type="range" id="sl-fcw" min="20" max="120" value="60" step="1">
+      <span class="cv-num" id="vl-fcw">60</span><span style="font-size:10px;color:var(--muted)">px</span>
+    </div>
+    <div class="cg">
+      <span class="cl">左边 tab?</span>
+      <select id="sel-left" style="font-family:DM Mono;font-size:12px;padding:4px 8px;border:1px solid var(--rule);border-radius:4px;background:white">
+        <option value="tab">tab（凸）</option>
+        <option value="hole">hole（凹）</option>
+      </select>
+    </div>
+    <div class="cg">
+      <span class="cl">右边 tab?</span>
+      <select id="sel-right" style="font-family:DM Mono;font-size:12px;padding:4px 8px;border:1px solid var(--rule);border-radius:4px;background:white">
+        <option value="hole">hole（凹）</option>
+        <option value="tab">tab（凸）</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="viz">
+    <canvas id="c-final" width="840" height="280"></canvas>
+    <div class="viz-cap">完整碎片截面图（高度方向同理）</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="sk">left thickness</div><div class="sv" id="sf-lt" style="color:var(--step3)">—</div></div>
+    <div class="stat"><div class="sk">core.width</div><div class="sv" id="sf-cw" style="color:var(--step2)">—</div></div>
+    <div class="stat"><div class="sk">right thickness</div><div class="sv" id="sf-rt" style="color:var(--step3)">—</div></div>
+    <div class="stat"><div class="sk">margin × 2</div><div class="sv" id="sf-mg" style="color:var(--step4)">14px</div></div>
+    <div class="stat" style="border-color:var(--s5b)"><div class="sk">piece.width</div><div class="sv" id="sf-pw" style="color:var(--step5)">—</div></div>
+  </div>
+</div>
+
+<!-- ══ FLOW SUMMARY ══════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="sec-title" style="font-family:DM Mono;font-size:16px;letter-spacing:1px">完整推导链</div>
+  <div class="viz">
+    <canvas id="c-chain" width="840" height="120"></canvas>
+    <div class="viz-cap">从「用户选碎片数」到「piece.width」的完整五步链</div>
+  </div>
+</div>
+
+</div><!-- /page -->
+
+<script>
+const DPR = window.devicePixelRatio || 1;
+const $ = id => document.getElementById(id);
+
+function mkC(id, w, h) {
+  const el = $(id);
+  el.width = w * DPR; el.height = h * DPR;
+  el.style.width = w + 'px'; el.style.height = h + 'px';
+  const cx = el.getContext('2d'); cx.scale(DPR, DPR);
+  return [cx, w, h];
+}
+function rr(cx, x, y, w, h, r, fill, stroke, lw=1) {
+  cx.save(); cx.beginPath();
+  if (cx.roundRect) cx.roundRect(x,y,w,h,r); else cx.rect(x,y,w,h);
+  if (fill)  { cx.fillStyle=fill; cx.fill(); }
+  if (stroke){ cx.strokeStyle=stroke; cx.lineWidth=lw; cx.stroke(); }
+  cx.restore();
+}
+function label(cx, s, x, y, opt={}) {
+  cx.save();
+  cx.font = opt.font || '11px DM Mono,monospace';
+  cx.fillStyle = opt.color || '#1a1814';
+  cx.textAlign = opt.align || 'center';
+  cx.textBaseline = opt.base || 'middle';
+  if (opt.alpha) cx.globalAlpha = opt.alpha;
+  cx.fillText(s, x, y);
+  cx.restore();
+}
+function arrH(cx, x1, x2, y, color='#8a8478') {
+  cx.save(); cx.strokeStyle=color; cx.fillStyle=color; cx.lineWidth=1;
+  cx.beginPath(); cx.moveTo(x1,y); cx.lineTo(x2,y); cx.stroke();
+  const dir = x2>x1?1:-1;
+  cx.beginPath(); cx.moveTo(x2,y);
+  cx.lineTo(x2-dir*5,y-3); cx.lineTo(x2-dir*5,y+3); cx.closePath(); cx.fill();
+  cx.restore();
+}
+function dimLine(cx, x1, x2, y, txt, color='#8a8478') {
+  cx.save(); cx.strokeStyle=color; cx.lineWidth=1;
+  cx.setLineDash([3,3]);
+  cx.beginPath(); cx.moveTo(x1,y-6); cx.lineTo(x1,y+6); cx.stroke();
+  cx.beginPath(); cx.moveTo(x2,y-6); cx.lineTo(x2,y+6); cx.stroke();
+  cx.setLineDash([]);
+  arrH(cx, x1, x2, y, color);
+  arrH(cx, x2, x1, y, color);
+  label(cx, txt, (x1+x2)/2, y-10, {color, font:'10px DM Mono,monospace'});
+  cx.restore();
+}
+
+// ── thickness estimate ────────────────────────────────────────────────────
+function tabThick(cw)  { return Math.round(cw * 0.22); }
+function holeThick(cw) { return Math.round(cw * 0.19); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CANVAS 1: overview bar
+// ═══════════════════════════════════════════════════════════════════════════
+function drawOverview() {
+  const [cx, W, H] = mkC('c-overview', 840, 170);
+  cx.clearRect(0,0,W,H);
+  const cw = 60, tt = tabThick(cw), ht = holeThick(cw), mg = 7;
+  const pw = mg + tt + cw + ht + mg;
+
+  const scale = 480 / pw;
+  const bh = 60, by = 55, bx = (W - pw*scale)/2;
+
+  const parts = [
+    { w: mg,  label: 'margin\n7px',         color: '#e8f5ee', border: '#9fd4b8', tc: '#1e7a4a' },
+    { w: tt,  label: 'left\nthickness',     color: '#fdf1e8', border: '#f0c49a', tc: '#c05a1a' },
+    { w: cw,  label: 'core.width',          color: '#f4eef8', border: '#d4b3e8', tc: '#7b3f8c' },
+    { w: ht,  label: 'right\nthickness',    color: '#fdf1e8', border: '#f0c49a', tc: '#c05a1a' },
+    { w: mg,  label: 'margin\n7px',         color: '#e8f5ee', border: '#9fd4b8', tc: '#1e7a4a' },
+  ];
+
+  let cx0 = bx;
+  parts.forEach((p, i) => {
+    const pw0 = p.w * scale;
+    rr(cx, cx0, by, pw0, bh, 0, p.color, p.border, 1.5);
+    const lines = p.label.split('\n');
+    label(cx, lines[0], cx0+pw0/2, by+bh/2 - (lines.length>1?8:0), {color:p.tc, font:'bold 11px DM Mono,monospace'});
+    if (lines[1]) label(cx, lines[1], cx0+pw0/2, by+bh/2+8, {color:p.tc, font:'10px DM Mono,monospace'});
+    cx0 += pw0;
+  });
+
+  // total bracket
+  const tx1 = bx, tx2 = bx + pw*scale;
+  cx.save(); cx.strokeStyle='#1a1814'; cx.lineWidth=1.5;
+  cx.beginPath(); cx.moveTo(tx1,by+bh+10); cx.lineTo(tx1,by+bh+18); cx.stroke();
+  cx.beginPath(); cx.moveTo(tx2,by+bh+10); cx.lineTo(tx2,by+bh+18); cx.stroke();
+  cx.beginPath(); cx.moveTo(tx1,by+bh+14); cx.lineTo(tx2,by+bh+14); cx.stroke();
+  cx.restore();
+  label(cx, `piece.width = ${pw}px（示例：core.width=${cw}, tab=${tt}, hole=${ht}, margin=7）`,
+    W/2, by+bh+30, {color:'#8b1a1a', font:'11px DM Mono,monospace'});
+
+  label(cx, '← piece.width 包含这四部分 →', W/2, by-14, {color:'#8a8478', font:'10px DM Mono,monospace'});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// cutChoices logic
+// ═══════════════════════════════════════════════════════════════════════════
+function calcCut(imgW, imgH, targetNop) {
+  let m = Math.floor(Math.max(imgW,imgH)/3), best=null;
+  while (m > 10) {
+    const rows=Math.floor(imgH/m), cols=Math.floor(imgW/m);
+    const nop=rows*cols;
+    if (nop >= 6) {
+      if (!best || Math.abs(nop-targetNop) < Math.abs(best.nop-targetNop))
+        best = {nop, rows, cols, size:m};
+    }
+    const s=Math.floor(imgH/(rows+1)), l=Math.floor(imgW/(cols+1));
+    m = Math.max(s,l);
+    if (m === Math.floor(imgH/rows) && m === Math.floor(imgW/cols)) break;
+  }
+  return best || {nop:0,rows:1,cols:1,size:Math.floor(Math.min(imgW,imgH)/2)};
+}
+
+let imgW=800, imgH=600, targetNop=100;
+
+function updateCutStats() {
+  const cut = calcCut(imgW, imgH, targetNop);
+  $('sv-rows').textContent = cut.rows;
+  $('sv-cols').textContent = cut.cols;
+  $('sv-size').textContent = cut.size + 'px';
+  $('sv-actual').textContent = cut.nop + '片';
+  drawCut(cut);
+  drawCore(cut);
+}
+
+function drawCut(cut) {
+  const [cx, W, H] = mkC('c-cut', 840, 220);
+  cx.clearRect(0,0,W,H);
+
+  const pad=20;
+  const sc = Math.min((W-pad*2)/imgW, (H-pad*2-30)/imgH);
+  const iw=imgW*sc, ih=imgH*sc;
+  const ix=(W-iw)/2, iy=pad;
+
+  // image bg
+  rr(cx, ix, iy, iw, ih, 0, '#faf9f6', '#ddd9d0', 1.5);
+
+  // grid
+  const cw=cut.size*sc, ch=cut.size*sc;
+  cx.save(); cx.strokeStyle='rgba(45,90,142,0.35)'; cx.lineWidth=1;
+  for (let c=0;c<cut.cols;c++) cx.strokeRect(ix+c*cw, iy, cw, ih);
+  for (let r=0;r<cut.rows;r++) cx.strokeRect(ix, iy+r*ch, iw, ch);
+  cx.restore();
+
+  // first cell highlight
+  rr(cx, ix, iy, cw, ch, 0, 'rgba(45,90,142,0.12)', '#2d5a8e', 2);
+  label(cx, `size=${cut.size}px`, ix+cw/2, iy+ch/2, {color:'#2d5a8e', font:'bold 11px DM Mono'});
+
+  // dim arrow for size
+  dimLine(cx, ix, ix+cw, iy+ih+14, `size = ${cut.size}px`, '#2d5a8e');
+
+  label(cx, `${imgW}×${imgH}px → ${cut.rows}行×${cut.cols}列，碎片数=${cut.nop}`,
+    W/2, iy+ih+36, {color:'#8a8478', font:'11px DM Mono'});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// core.width distribution
+// ═══════════════════════════════════════════════════════════════════════════
+function drawCore(cut) {
+  const [cx, W, H] = mkC('c-core', 840, 160);
+  cx.clearRect(0,0,W,H);
+
+  const { size, cols } = cut;
+  const remainder = imgW % size;
+  const C = Math.floor(remainder/cols);
+  let z = remainder % cols;
+  let k = remainder;
+
+  const barH=50, barY=40, padX=30;
+  const totalW = W-padX*2;
+  // compute actual core widths
+  let coreWidths=[], kk=remainder, zz=z;
+  for (let i=0;i<cols;i++) {
+    let y=size;
+    if(kk>0){kk-=C;y+=C;if(zz>0){y++;zz--;}}
+    coreWidths.push(y);
+  }
+  const sumCW = coreWidths.reduce((a,b)=>a+b,0);
+  const sc = totalW / sumCW;
+
+  let x0=padX;
+  coreWidths.forEach((cw,i) => {
+    const bw = cw*sc;
+    const isPlus = cw > size;
+    rr(cx, x0, barY, bw, barH, 0,
+      isPlus ? 'rgba(123,63,140,0.2)' : 'rgba(123,63,140,0.07)',
+      '#d4b3e8', 1);
+    if (bw > 18) label(cx, String(cw), x0+bw/2, barY+barH/2,
+      {color: isPlus?'#7b3f8c':'#b08fbe', font:`${bw>28?'bold ':''} 10px DM Mono`});
+    x0 += bw;
+  });
+
+  // legend
+  rr(cx,padX,barY+barH+16,14,10,2,'rgba(123,63,140,0.2)','#d4b3e8',1);
+  label(cx,`core.width = size+1（前${remainder>0?Math.min(remainder%cols||remainder,cols):0}列）`,
+    padX+20,barY+barH+21,{align:'left',color:'#7b3f8c',font:'10px DM Mono'});
+  rr(cx,padX,barY+barH+30,14,10,2,'rgba(123,63,140,0.07)','#d4b3e8',1);
+  label(cx,`core.width = size（其余列）`,
+    padX+20,barY+barH+35,{align:'left',color:'#b08fbe',font:'10px DM Mono'});
+
+  label(cx, `imgW % size = ${imgW} % ${size} = ${remainder}  →  前${remainder%cols||0}列 +1px`,
+    W/2, 18, {color:'#8a8478', font:'11px DM Mono'});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// thickness canvas
+// ═══════════════════════════════════════════════════════════════════════════
+function drawThickness() {
+  const [cx, W, H] = mkC('c-thickness', 840, 260);
+  cx.clearRect(0,0,W,H);
+  const cw = parseInt($('sl-cw').value);
+  const tt = tabThick(cw), ht = holeThick(cw);
+
+  // draw piece half-cross-section for TAB (left)
+  const scale = 3.2, half = W/2;
+  drawSection(cx, 60, 30, cw, tt, true, scale, 'tab');
+  drawSection(cx, half+60, 30, cw, ht, false, scale, 'hole');
+
+  $('sv-tab').textContent = tt + 'px';
+  $('sv-hole').textContent = ht + 'px';
+  $('sv-ratio').textContent = ((tt/cw)*100).toFixed(0) + '% / ' + ((ht/cw)*100).toFixed(0) + '%';
+}
+
+function drawSection(cx, ox, oy, cw, thick, isTab, sc, type) {
+  const W2 = cw*sc, H2 = 60;
+  const th = thick*sc;
+
+  // core area
+  rr(cx, ox, oy, W2, H2, 0, '#f4eef8', '#d4b3e8', 1.5);
+  label(cx, 'core.width', ox+W2/2, oy+H2/2, {color:'#7b3f8c', font:'bold 11px DM Mono'});
+
+  if (isTab) {
+    // tab: bump sticking up
+    cx.save();
+    cx.fillStyle='rgba(192,90,26,0.2)'; cx.strokeStyle='#c05a1a'; cx.lineWidth=1.5;
+    cx.beginPath();
+    cx.moveTo(ox+W2*0.25, oy);
+    cx.quadraticCurveTo(ox+W2*0.3, oy-th*0.6, ox+W2*0.35, oy-th);
+    cx.lineTo(ox+W2*0.65, oy-th);
+    cx.quadraticCurveTo(ox+W2*0.7, oy-th*0.6, ox+W2*0.75, oy);
+    cx.closePath(); cx.fill(); cx.stroke();
+    cx.restore();
+    dimLine(cx, ox+W2*0.75, ox+W2*0.75+30, oy-th/2, `thickness=${thick}px`, '#c05a1a');
+    label(cx, 'tab（凸起）', ox+W2/2, oy-th-16, {color:'#c05a1a', font:'bold 11px DM Mono'});
+  } else {
+    // hole: notch going down
+    cx.save();
+    cx.fillStyle='rgba(192,90,26,0.15)'; cx.strokeStyle='#c05a1a'; cx.lineWidth=1.5;
+    cx.beginPath();
+    cx.moveTo(ox+W2*0.25, oy);
+    cx.quadraticCurveTo(ox+W2*0.3, oy+thick*sc*0.6, ox+W2*0.35, oy+thick*sc);
+    cx.lineTo(ox+W2*0.65, oy+thick*sc);
+    cx.quadraticCurveTo(ox+W2*0.7, oy+thick*sc*0.6, ox+W2*0.75, oy);
+    cx.closePath(); cx.fill(); cx.stroke();
+    cx.restore();
+    dimLine(cx, ox+W2*0.75, ox+W2*0.75+30, oy+thick*sc/2, `thickness=${thick}px`, '#c05a1a');
+    label(cx, 'hole（凹口）', ox+W2/2, oy+thick*sc+16, {color:'#c05a1a', font:'bold 11px DM Mono'});
+  }
+
+  label(cx, `core.width = ${cw}px`, ox+W2/2, oy+H2+18, {color:'#7b3f8c', font:'10px DM Mono'});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// complement canvas
+// ═══════════════════════════════════════════════════════════════════════════
+function drawComplement() {
+  const [cx, W, H] = mkC('c-complement', 840, 130);
+  cx.clearRect(0,0,W,H);
+
+  const cw=80, th=18, mg=10, pw=mg+th+cw+th+mg;
+  const sc=1.4, gap=8;
+  const by=20, bh=70;
+  const x0=(W-2*pw*sc-gap)/2;
+
+  // left piece (right edge = tab)
+  drawPieceH(cx, x0, by, cw*sc, bh, th*sc, mg*sc, true, false, '#eef4fb','#b3cde8','#2d5a8e', 'A');
+  // right piece (left edge = hole)
+  drawPieceH(cx, x0+pw*sc+gap, by, cw*sc, bh, th*sc, mg*sc, false, true, '#fdf1e8','#f0c49a','#c05a1a', 'B');
+
+  label(cx, 'A.right = tab（凸）', x0+pw*sc/2, by+bh+18, {color:'#2d5a8e', font:'10px DM Mono'});
+  label(cx, 'B.left = hole（凹）', x0+pw*sc+gap+pw*sc/2, by+bh+18, {color:'#c05a1a', font:'10px DM Mono'});
+  label(cx, '⟷  拼合后恰好互补', W/2, by+bh+34, {color:'#1e7a4a', font:'bold 11px DM Mono'});
+}
+
+function drawPieceH(cx, x, y, cw, h, th, mg, rightTab, leftHole, fill, border, tc, name) {
+  const pw=mg+th+cw+th+mg;
+  rr(cx, x, y, pw, h, 3, fill, border, 1.5);
+  label(cx, name, x+pw/2, y+h/2, {color:tc, font:'bold 13px DM Mono'});
+  if (rightTab) {
+    cx.save(); cx.fillStyle='rgba(192,90,26,0.25)'; cx.strokeStyle='#c05a1a'; cx.lineWidth=1.5;
+    cx.beginPath();
+    cx.moveTo(x+pw, y+h*0.2);
+    cx.quadraticCurveTo(x+pw+th*0.8, y+h*0.3, x+pw+th, y+h*0.5);
+    cx.quadraticCurveTo(x+pw+th*0.8, y+h*0.7, x+pw, y+h*0.8);
+    cx.closePath(); cx.fill(); cx.stroke(); cx.restore();
+  }
+  if (leftHole) {
+    cx.save(); cx.fillStyle=fill; cx.strokeStyle='#c05a1a'; cx.lineWidth=1.5;
+    cx.beginPath();
+    cx.moveTo(x, y+h*0.2);
+    cx.quadraticCurveTo(x+th*0.8, y+h*0.3, x+th, y+h*0.5);
+    cx.quadraticCurveTo(x+th*0.8, y+h*0.7, x, y+h*0.8);
+    cx.closePath(); cx.fill(); cx.stroke();
+    cx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// final interactive piece
+// ═══════════════════════════════════════════════════════════════════════════
+function drawFinal() {
+  const [cx, W, H] = mkC('c-final', 840, 280);
+  cx.clearRect(0,0,W,H);
+
+  const coreW = parseInt($('sl-fcw').value);
+  const leftIsTab  = $('sel-left').value  === 'tab';
+  const rightIsTab = $('sel-right').value === 'tab';
+  const lt = leftIsTab  ? tabThick(coreW) : holeThick(coreW);
+  const rt = rightIsTab ? tabThick(coreW) : holeThick(coreW);
+  const mg = 7;
+  const pw = mg + lt + coreW + rt + mg;
+
+  $('sf-lt').textContent = lt + 'px';
+  $('sf-cw').textContent = coreW + 'px';
+  $('sf-rt').textContent = rt + 'px';
+  $('sf-mg').textContent = '14px (7+7)';
+  $('sf-pw').textContent = pw + 'px';
+  $('vl-fcw').textContent = coreW;
+
+  const sc = Math.min(500/pw, 3.2);
+  const bh = 80, by = (H-bh)/2;
+  const bx = (W - pw*sc)/2;
+
+  // margin left
+  rr(cx, bx, by, mg*sc, bh, 0, '#e8f5ee', '#9fd4b8', 1.5);
+  label(cx, 'mg', bx+mg*sc/2, by+bh/2, {color:'#1e7a4a', font:'10px DM Mono'});
+
+  // left edge
+  const lx = bx+mg*sc;
+  const lw = lt*sc;
+  rr(cx, lx, by, lw, bh, 0, '#fdf1e8', '#f0c49a', 1.5);
+  if (leftIsTab) {
+    // tab bump left
+    cx.save(); cx.fillStyle='rgba(192,90,26,0.3)'; cx.strokeStyle='#c05a1a'; cx.lineWidth=1.5;
+    const bumpH=lw*0.9;
+    cx.beginPath();
+    cx.moveTo(lx, by+bh*0.2);
+    cx.quadraticCurveTo(lx-bumpH*0.8, by+bh*0.3, lx-bumpH, by+bh/2);
+    cx.quadraticCurveTo(lx-bumpH*0.8, by+bh*0.7, lx, by+bh*0.8);
+    cx.closePath(); cx.fill(); cx.stroke(); cx.restore();
+  } else {
+    cx.save(); cx.fillStyle='rgba(192,90,26,0.12)'; cx.strokeStyle='#c05a1a'; cx.lineWidth=1.5;
+    const bumpH=lw*0.9;
+    cx.beginPath();
+    cx.moveTo(lx, by+bh*0.2);
+    cx.quadraticCurveTo(lx+bumpH*0.8, by+bh*0.3, lx+bumpH, by+bh/2);
+    cx.quadraticCurveTo(lx+bumpH*0.8, by+bh*0.7, lx, by+bh*0.8);
+    cx.closePath(); cx.fill(); cx.stroke(); cx.restore();
+  }
+  if (lw > 12) label(cx, String(lt), lx+lw/2, by+bh/2, {color:'#c05a1a', font:'10px DM Mono'});
+
+  // core
+  const cx0 = lx+lw, coreWsc = coreW*sc;
+  rr(cx, cx0, by, coreWsc, bh, 0, '#f4eef8', '#d4b3e8', 2);
+  label(cx, `core.width\n${coreW}px`, cx0+coreWsc/2, by+bh/2-6, {color:'#7b3f8c', font:'bold 12px DM Mono'});
+  label(cx, `${coreW}px`, cx0+coreWsc/2, by+bh/2+10, {color:'#7b3f8c', font:'11px DM Mono'});
+
+  // right edge
+  const rx = cx0+coreWsc, rw = rt*sc;
+  rr(cx, rx, by, rw, bh, 0, '#fdf1e8', '#f0c49a', 1.5);
+  if (rightIsTab) {
+    cx.save(); cx.fillStyle='rgba(192,90,26,0.3)'; cx.strokeStyle='#c05a1a'; cx.lineWidth=1.5;
+    const bumpH=rw*0.9;
+    cx.beginPath();
+    cx.moveTo(rx+rw, by+bh*0.2);
+    cx.quadraticCurveTo(rx+rw+bumpH*0.8, by+bh*0.3, rx+rw+bumpH, by+bh/2);
+    cx.quadraticCurveTo(rx+rw+bumpH*0.8, by+bh*0.7, rx+rw, by+bh*0.8);
+    cx.closePath(); cx.fill(); cx.stroke(); cx.restore();
+  } else {
+    cx.save(); cx.fillStyle='rgba(192,90,26,0.12)'; cx.strokeStyle='#c05a1a'; cx.lineWidth=1.5;
+    const bumpH=rw*0.9;
+    cx.beginPath();
+    cx.moveTo(rx+rw, by+bh*0.2);
+    cx.quadraticCurveTo(rx+rw-bumpH*0.8, by+bh*0.3, rx+rw-bumpH, by+bh/2);
+    cx.quadraticCurveTo(rx+rw-bumpH*0.8, by+bh*0.7, rx+rw, by+bh*0.8);
+    cx.closePath(); cx.fill(); cx.stroke(); cx.restore();
+  }
+  if (rw > 12) label(cx, String(rt), rx+rw/2, by+bh/2, {color:'#c05a1a', font:'10px DM Mono'});
+
+  // margin right
+  const mrx = rx+rw;
+  rr(cx, mrx, by, mg*sc, bh, 0, '#e8f5ee', '#9fd4b8', 1.5);
+  label(cx, 'mg', mrx+mg*sc/2, by+bh/2, {color:'#1e7a4a', font:'10px DM Mono'});
+
+  // dimension lines
+  const dimY = by+bh+24;
+  const parts2 = [
+    { x1: bx,      x2: bx+mg*sc,       color:'#1e7a4a', txt: `mg=${mg}` },
+    { x1: lx,      x2: lx+lw,          color:'#c05a1a', txt: `lt=${lt}` },
+    { x1: cx0,     x2: cx0+coreWsc,    color:'#7b3f8c', txt: `cw=${coreW}` },
+    { x1: rx,      x2: rx+rw,          color:'#c05a1a', txt: `rt=${rt}` },
+    { x1: mrx,     x2: mrx+mg*sc,      color:'#1e7a4a', txt: `mg=${mg}` },
+  ];
+  parts2.forEach((p,i) => dimLine(cx, p.x1, p.x2, dimY+i*0, p.txt, p.color));
+
+  // total bracket
+  const totalY = dimY + 20;
+  cx.save(); cx.strokeStyle='#8b1a1a'; cx.lineWidth=1.5;
+  cx.beginPath(); cx.moveTo(bx, totalY); cx.lineTo(bx, totalY+8); cx.stroke();
+  cx.beginPath(); cx.moveTo(mrx+mg*sc, totalY); cx.lineTo(mrx+mg*sc, totalY+8); cx.stroke();
+  cx.beginPath(); cx.moveTo(bx, totalY+4); cx.lineTo(mrx+mg*sc, totalY+4); cx.stroke();
+  cx.restore();
+  label(cx, `piece.width = ${pw}px`,
+    (bx+mrx+mg*sc)/2, totalY+18, {color:'#8b1a1a', font:'bold 12px DM Mono'});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// chain flow
+// ═══════════════════════════════════════════════════════════════════════════
+function drawChain() {
+  const [cx, W, H] = mkC('c-chain', 840, 120);
+  cx.clearRect(0,0,W,H);
+
+  const steps = [
+    { t:'用户选\n碎片数', c:'#2d5a8e', bg:'#eef4fb', b:'#b3cde8' },
+    { t:'cutChoices\nsize, rows, cols', c:'#2d5a8e', bg:'#eef4fb', b:'#b3cde8' },
+    { t:'knife.cut\ncore.width (±1px)', c:'#7b3f8c', bg:'#f4eef8', b:'#d4b3e8' },
+    { t:'buildMask\nthickness 像素测量', c:'#c05a1a', bg:'#fdf1e8', b:'#f0c49a' },
+    { t:'piece.width\n= 14 + lt + cw + rt', c:'#8b1a1a', bg:'#fdf0f0', b:'#f0b3b3' },
+  ];
+
+  const bw=130, bh=62, gap=(W-steps.length*bw)/(steps.length+1), by=(H-bh)/2;
+  steps.forEach((s, i) => {
+    const x = gap + i*(bw+gap);
+    rr(cx, x, by, bw, bh, 6, s.bg, s.b, 1.5);
+    const lines = s.t.split('\n');
+    label(cx, lines[0], x+bw/2, by+bh/2-(lines[1]?9:0), {color:s.c, font:'bold 11px DM Mono'});
+    if (lines[1]) label(cx, lines[1], x+bw/2, by+bh/2+9, {color:s.c, font:'9px DM Mono'});
+    if (i < steps.length-1) {
+      const ax=x+bw+4, ay=by+bh/2;
+      cx.save(); cx.strokeStyle='#8a8478'; cx.fillStyle='#8a8478'; cx.lineWidth=1.5;
+      cx.beginPath(); cx.moveTo(ax,ay); cx.lineTo(ax+gap-8,ay); cx.stroke();
+      cx.beginPath(); cx.moveTo(ax+gap-6,ay);
+      cx.lineTo(ax+gap-12,ay-4); cx.lineTo(ax+gap-12,ay+4); cx.closePath(); cx.fill();
+      cx.restore();
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// events & init
+// ═══════════════════════════════════════════════════════════════════════════
+$('sl-imgW').addEventListener('input', e => { imgW=+e.target.value; $('vl-imgW').textContent=imgW; updateCutStats(); });
+$('sl-imgH').addEventListener('input', e => { imgH=+e.target.value; $('vl-imgH').textContent=imgH; updateCutStats(); });
+$('sl-nop').addEventListener('input',  e => { targetNop=+e.target.value; $('vl-nop').textContent=targetNop; updateCutStats(); });
+$('sl-cw').addEventListener('input',   e => { $('vl-cw').textContent=e.target.value; drawThickness(); });
+$('sl-fcw').addEventListener('input',  () => drawFinal());
+$('sel-left').addEventListener('change',  () => drawFinal());
+$('sel-right').addEventListener('change', () => drawFinal());
+
+drawOverview();
+updateCutStats();
+drawThickness();
+drawComplement();
+drawFinal();
+drawChain();
+</script>
+</body>
+</html>
