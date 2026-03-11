@@ -463,18 +463,34 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
   const P = cnvH / g;         // float row count
 
   // Round: if fractional part >= 0.5, round up
-  const E = (w - Math.floor(w)) >= 0.5 ? 1 : 0;
-  const k = (P - Math.floor(P)) >= 0.5 ? 1 : 0;
+  let E = (w - Math.floor(w)) >= 0.5 ? 1 : 0;
+  let k = (P - Math.floor(P)) >= 0.5 ? 1 : 0;
 
-  const gridCols = Math.floor(w) + E;
-  const gridRows = Math.floor(P) + k;
+  let gridCols = Math.floor(w) + E;
+  let gridRows = Math.floor(P) + k;
 
   // ── Step 3: Compute cell sizes S and C ──
-  const S = p * (w / gridCols);  // = canvasW / gridCols (exactly fills canvas)
-  const C = g * (P / gridRows);  // = canvasH / gridRows
+  let S = p * (w / gridCols);  // = canvasW / gridCols (exactly fills canvas)
+  let C = g * (P / gridRows);  // = canvasH / gridRows
+
+  // Safety: if rounding up made cells smaller than the reference piece size, undo the
+  // round-up.  In the original jigex, C < g is fine because pieces are irregular shapes
+  // that interlock (tabs fit into holes). In our rectangular simulator the full bounding
+  // box is solid, so we need S >= p and C >= g to prevent overlap.
+  if (S < p && E === 1) {
+    E = 0;
+    gridCols = Math.max(1, Math.floor(w));
+    S = p * (w / gridCols);
+  }
+  if (C < g && k === 1) {
+    k = 0;
+    gridRows = Math.max(1, Math.floor(P));
+    C = g * (P / gridRows);
+  }
 
   log(`格子: w=${w.toFixed(2)}, P=${P.toFixed(2)}, E=${E}, k=${k}`, 'info');
   log(`格子尺寸: S=${S.toFixed(1)}, C=${C.toFixed(1)}, cols=${gridCols}, rows=${gridRows}`, 'info');
+  log(`螺旋配额: G=${(cnvW - subjectW).toFixed(0)}, V=${(cnvH - subjectH).toFixed(0)}`, 'info');
 
   $('sv-pg').textContent = `${p.toFixed(0)}×${g.toFixed(0)}`;
   $('sv-sc').textContent = `${S.toFixed(0)}×${C.toFixed(0)}`;
@@ -570,7 +586,7 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
     switch (direction) {
       case 3: // RIGHT
         f = I + S;
-        if (f > spiralRight - p / 4) {
+        if (f > spiralRight - p / 2) {
           // Hit right wall → turn DOWN
           direction = 1;
           N--;
@@ -584,7 +600,7 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
 
       case 1: // DOWN
         v = L + C;
-        if (v > spiralBottom - g / 4) {
+        if (v > spiralBottom - g / 2) {
           // Hit bottom wall → turn LEFT
           direction = 2;
           R--;
@@ -598,7 +614,7 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
 
       case 2: // LEFT
         f = I - S;
-        if (f < spiralLeft + p / 4) {
+        if (f < spiralLeft + p / 2) {
           // Hit left wall → turn UP
           direction = 0;
           N--;
@@ -612,7 +628,7 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
 
       case 0: // UP
         v = L - C;
-        if (v < spiralTop + g / 4) {
+        if (v < spiralTop + g / 2) {
           // Hit top wall → turn RIGHT
           direction = 3;
           R--;
