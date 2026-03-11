@@ -446,15 +446,19 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
   log(`scatter 开始: ${totalPieces} 碎片, 画布 ${cnvW}×${cnvH}`, 'info');
 
   // ── Step 1: Compute reference piece dimensions p and g ──
-  const h = 2 * MARGIN; // = 14
-  let pSum = 0, gSum = 0;
+  // Use the MAXIMUM piece bounding box (not average minus margin) so that grid cells
+  // are always large enough to contain any piece without overlap.  In the original
+  // jigex, pieces are irregular transparent shapes that interlock, so bounding-box
+  // overlap is fine.  In our rectangular simulator every piece is a solid rectangle,
+  // so we need S >= maxW and C >= maxH to prevent visible overlap.
+  let maxW = 0, maxH = 0;
   specs.forEach(s => {
-    pSum += s.width - h;
-    gSum += s.height - h;
+    if (s.width > maxW) maxW = s.width;
+    if (s.height > maxH) maxH = s.height;
   });
-  const p = pSum * 1.05 / totalPieces;  // average net width × 1.05
-  const g = gSum * 1.05 / totalPieces;  // average net height × 1.05
-  log(`参考碎片尺寸: p=${p.toFixed(1)}, g=${g.toFixed(1)}`, 'info');
+  const p = maxW * 1.05;  // max piece width + 5% breathing room
+  const g = maxH * 1.05;  // max piece height + 5% breathing room
+  log(`参考碎片尺寸: p=${p.toFixed(1)}, g=${g.toFixed(1)} (maxW=${maxW.toFixed(0)}, maxH=${maxH.toFixed(0)})`, 'info');
 
   // ── Step 2: Compute grid dimensions ──
   // b = left offset (iOS safe area, 0 for web)
@@ -586,11 +590,11 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
     switch (direction) {
       case 3: // RIGHT
         f = I + S;
-        if (f > spiralRight - p / 2) {
-          // Hit right wall → turn DOWN
+        if (f > spiralRight - p / 4) {
+          // Hit right wall → turn DOWN (trigger at p/4 from edge, per original jigex l=p/4)
           direction = 1;
           N--;
-          I = spiralRight - p / 2;
+          I = spiralRight - p / 2;  // center last piece at p/2 from edge
           L += C;
           if (R > 0) spiralRight -= S;
         } else {
@@ -600,11 +604,11 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
 
       case 1: // DOWN
         v = L + C;
-        if (v > spiralBottom - g / 2) {
-          // Hit bottom wall → turn LEFT
+        if (v > spiralBottom - g / 4) {
+          // Hit bottom wall → turn LEFT (trigger at g/4 from edge, per original jigex c=g/4)
           direction = 2;
           R--;
-          L = spiralBottom - g / 2;
+          L = spiralBottom - g / 2;  // center last piece at g/2 from edge
           I -= S;
           if (N > 0) spiralBottom -= C;
         } else {
@@ -614,11 +618,11 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
 
       case 2: // LEFT
         f = I - S;
-        if (f < spiralLeft + p / 2) {
-          // Hit left wall → turn UP
+        if (f < spiralLeft + p / 4) {
+          // Hit left wall → turn UP (trigger at p/4 from edge)
           direction = 0;
           N--;
-          I = spiralLeft + p / 2;
+          I = spiralLeft + p / 2;  // center last piece at p/2 from edge
           L -= C;
           if (R > 0) spiralLeft += S;
         } else {
@@ -628,11 +632,11 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
 
       case 0: // UP
         v = L - C;
-        if (v < spiralTop + g / 2) {
-          // Hit top wall → turn RIGHT
+        if (v < spiralTop + g / 4) {
+          // Hit top wall → turn RIGHT (trigger at g/4 from edge)
           direction = 3;
           R--;
-          L = spiralTop + g / 2;
+          L = spiralTop + g / 2;  // center last piece at g/2 from edge
           I += S;
           if (N > 0) spiralTop += C;
         } else {
