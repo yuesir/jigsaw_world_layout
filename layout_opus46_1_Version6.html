@@ -513,9 +513,17 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
   let spiralLeft = b;
   let spiralTop = C;
 
-  // Counters for spiral layer tracking
-  let N = 999; // vertical layers remaining
-  let R = 999; // horizontal layers remaining
+  // Counters for spiral layer tracking — limit depth based on subject gap (original jigex logic)
+  const G = cnvW - subjectW;  // horizontal gap around subject
+  const V = cnvH - subjectH;  // vertical gap around subject
+  let N, R;
+  if (G < V) {
+    R = Math.floor(G / S);  // horizontal gap is smaller: limit horizontal layers
+    N = 999;
+  } else {
+    N = Math.floor(V / C);  // vertical gap is smaller: limit vertical layers
+    R = 999;
+  }
 
   let placedCount = 0;
   let maxIterations = totalPieces * 50; // safety valve
@@ -534,20 +542,7 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
       hitsSubject = true;
     }
 
-    // ── Collision check: overlap with already-placed pieces ──
-    let hitsPlaced = false;
-    for (let pi = placedPieces.length - 1; pi >= 0; pi--) {
-      const other = placedPieces[pi];
-      const margin = 5; // Add small margin between pieces to prevent overlap
-      const ow = (piece.width / 2 + other.width / 2 + margin);
-      const oh = (piece.height / 2 + other.height / 2 + margin);
-      if (Math.abs(I - other.x) < ow && Math.abs(L - other.y) < oh) {
-        hitsPlaced = true;
-        break;
-      }
-    }
-
-    const blocked = hitsSubject || hitsPlaced;
+    const blocked = hitsSubject;
 
     // ── Can place here? Position must be within spiral boundaries ──
     const canPlace = !blocked && (
@@ -570,20 +565,17 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
       placedCount++;
     }
 
-    // ── Advance cursor along current direction ──
-    const stepW = blocked ? S / 2 : S;  // half-step when blocked (to try nearby)
-    const stepH = blocked ? C / 2 : C;
-
+    // ── Advance cursor along current direction (always full grid step) ──
     let f, v; // next position candidates
     switch (direction) {
       case 3: // RIGHT
-        f = I + stepW;
-        if (f > spiralRight - p / 2) {
+        f = I + S;
+        if (f > spiralRight - p / 4) {
           // Hit right wall → turn DOWN
           direction = 1;
           N--;
           I = spiralRight - p / 2;
-          if (canPlace) L += C;
+          L += C;
           if (R > 0) spiralRight -= S;
         } else {
           I = f;
@@ -591,13 +583,13 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
         break;
 
       case 1: // DOWN
-        v = L + stepH;
-        if (v > spiralBottom - g / 2) {
+        v = L + C;
+        if (v > spiralBottom - g / 4) {
           // Hit bottom wall → turn LEFT
           direction = 2;
           R--;
           L = spiralBottom - g / 2;
-          if (canPlace) I -= S;
+          I -= S;
           if (N > 0) spiralBottom -= C;
         } else {
           L = v;
@@ -605,13 +597,13 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
         break;
 
       case 2: // LEFT
-        f = I - stepW;
-        if (f < spiralLeft + p / 2) {
+        f = I - S;
+        if (f < spiralLeft + p / 4) {
           // Hit left wall → turn UP
           direction = 0;
           N--;
           I = spiralLeft + p / 2;
-          if (canPlace) L -= C;
+          L -= C;
           if (R > 0) spiralLeft += S;
         } else {
           I = f;
@@ -619,13 +611,13 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
         break;
 
       case 0: // UP
-        v = L - stepH;
-        if (v < spiralTop + g / 2) {
+        v = L - C;
+        if (v < spiralTop + g / 4) {
           // Hit top wall → turn RIGHT
           direction = 3;
           R--;
           L = spiralTop + g / 2;
-          if (canPlace) I += S;
+          I += S;
           if (N > 0) spiralTop += C;
         } else {
           L = v;
