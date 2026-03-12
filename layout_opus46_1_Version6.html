@@ -677,13 +677,16 @@ function scatter(specs, cnvW, cnvH, subjectW, subjectH) {
   log(`scatter 完成: 放置 ${placedCount}/${totalPieces} 碎片 (${iterations} 迭代)`, 'ok');
   $('sv-placed').textContent = `${placedCount}/${totalPieces}`;
 
-  return placedPieces;
+  return {
+    pieces: placedPieces,
+    grid: { cols: gridCols, rows: gridRows, cellW: S, cellH: C, offsetX: b }
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Drawing
 // ═══════════════════════════════════════════════════════════════════════════════
-function drawLayout(specs, cnvW, cnvH, subject, subjectImg) {
+function drawLayout(specs, cnvW, cnvH, subject, subjectImg, gridInfo) {
   const canvas = $('main-canvas');
   canvas.width = cnvW * DPR;
   canvas.height = cnvH * DPR;
@@ -700,8 +703,48 @@ function drawLayout(specs, cnvW, cnvH, subject, subjectImg) {
   cx.save();
   cx.strokeStyle = 'rgba(255,255,255,0.04)';
   cx.lineWidth = 0.5;
-  // We don't draw the scatter grid since it's internal
   cx.restore();
+
+  // ── Scatter grid dashed lines ──
+  if (gridInfo) {
+    const { cols, rows, cellW, cellH, offsetX } = gridInfo;
+    cx.save();
+    cx.strokeStyle = 'rgba(99,102,241,0.2)';
+    cx.lineWidth = 1;
+    cx.setLineDash([6, 4]);
+    // Vertical lines
+    for (let i = 0; i <= cols; i++) {
+      const x = offsetX + i * cellW;
+      cx.beginPath();
+      cx.moveTo(x, 0);
+      cx.lineTo(x, rows * cellH);
+      cx.stroke();
+    }
+    // Horizontal lines
+    for (let j = 0; j <= rows; j++) {
+      const y = j * cellH;
+      cx.beginPath();
+      cx.moveTo(offsetX, y);
+      cx.lineTo(offsetX + cols * cellW, y);
+      cx.stroke();
+    }
+    cx.restore();
+
+    // Cell labels (row,col)
+    cx.save();
+    cx.font = '9px JetBrains Mono';
+    cx.fillStyle = 'rgba(99,102,241,0.4)';
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const lx = offsetX + (c + 0.5) * cellW;
+        const ly = (r + 0.5) * cellH;
+        cx.fillText(`${r},${c}`, lx, ly);
+      }
+    }
+    cx.restore();
+  }
 
   // ── Subject area (center, semi-transparent) ──
   if (subjectImg) {
@@ -838,10 +881,10 @@ function runPipeline() {
   log(`切割完成: ${specs.length}块碎片`, 'ok');
 
   // Run scatter
-  const placed = scatter(specs, canvasW, canvasH, subject.width, subject.height);
+  const result = scatter(specs, canvasW, canvasH, subject.width, subject.height);
 
   // Draw
-  drawLayout(placed, canvasW, canvasH, subject, sourceImage);
+  drawLayout(result.pieces, canvasW, canvasH, subject, sourceImage, result.grid);
 
   log('═══ 布局完成 ═══', 'ok');
 }
