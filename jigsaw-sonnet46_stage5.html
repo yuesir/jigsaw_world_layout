@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拼图存档系统 - 阶段五</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
+
+header {
+  background: #16213e; border-bottom: 1px solid #0f3460;
+  padding: 0 20px; display: flex; align-items: center; gap: 10px; height: 50px;
+}
+header h1 { font-size: 16px; font-weight: 500; }
+.badge { background: #0f3460; color: #4cc9f0; font-size: 11px; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+.badge.green  { background: #0a3020; color: #4ade80; }
+.badge.amber  { background: #2a1a00; color: #fbbf24; }
+.hint { font-size: 11px; color: #546e7a; }
+
+.layout { display: flex; height: calc(100vh - 50px); }
+.game-area { flex: 1; position: relative; }
+#gameCanvas { display: block; cursor: default; }
+
+/* 侧边栏 */
+.sidebar {
+  width: 310px; background: #16213e; border-left: 1px solid #0f3460;
+  padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 11px;
+}
+.section { background: #0f3460; border-radius: 8px; padding: 12px; }
+.section h3 { font-size: 11px; color: #4cc9f0; margin-bottom: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.info-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 12px; }
+.info-row:last-child { border-bottom: none; }
+.info-label { color: #888; }
+.info-val { font-family: monospace; font-size: 11px; color: #4cc9f0; }
+.info-val.green { color: #4ade80; }
+.info-val.amber { color: #fbbf24; }
+.info-val.red   { color: #f87171; }
+
+/* 存档卡片列表 */
+.save-list { display: flex; flex-direction: column; gap: 6px; }
+.save-card {
+  background: #1a1a2e; border: 1px solid #333; border-radius: 6px; padding: 8px 10px;
+  display: flex; align-items: center; gap: 8px; cursor: pointer; transition: border-color .15s;
+}
+.save-card:hover { border-color: #4cc9f0; }
+.save-card.active { border-color: #4ade80; background: rgba(74,222,128,0.06); }
+.save-thumb { width: 44px; height: 34px; border-radius: 4px; flex-shrink: 0; }
+.save-info { flex: 1; min-width: 0; }
+.save-name { font-size: 12px; font-weight: 500; color: #e0e0e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.save-meta { font-size: 11px; color: #666; font-family: monospace; margin-top: 1px; }
+.save-del { background: none; border: none; color: #444; cursor: pointer; font-size: 14px; padding: 2px 4px; border-radius: 3px; }
+.save-del:hover { color: #f87171; background: rgba(248,113,113,0.1); }
+.save-empty { font-size: 12px; color: #444; text-align: center; padding: 12px 0; }
+
+.btn-row { display: flex; gap: 6px; }
+.btn {
+  flex: 1; background: #1a1a2e; border: 1px solid #4cc9f0; color: #4cc9f0;
+  padding: 7px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; text-align: center;
+}
+.btn:hover { background: #0f3460; }
+.btn.primary { background: #0f3460; border-color: #4ade80; color: #4ade80; }
+.btn.primary:hover { background: #0a3020; }
+.btn.danger { border-color: #f87171; color: #f87171; }
+.btn.danger:hover { background: rgba(248,113,113,0.1); }
+
+/* JSON 预览 */
+.json-preview {
+  background: #0a0a1a; border-radius: 5px; padding: 8px; font-family: monospace;
+  font-size: 10px; line-height: 1.65; color: #82aaff; max-height: 180px; overflow-y: auto;
+  white-space: pre; word-break: break-all; white-space: pre-wrap;
+}
+.json-key   { color: #c792ea; }
+.json-str   { color: #c3e88d; }
+.json-num   { color: #f78c6c; }
+
+/* 事件日志 */
+.event-log {
+  background: #0a0a1a; border-radius: 5px; padding: 7px;
+  font-family: monospace; font-size: 11px; height: 110px; overflow-y: auto;
+  display: flex; flex-direction: column-reverse;
+}
+.log-line { line-height: 1.65; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.log-save   { color: #4ade80; } .log-load   { color: #60a5fa; }
+.log-delete { color: #f87171; } .log-snap   { color: #a78bfa; }
+.log-event  { color: #546e7a; } .log-done   { color: #fbbf24; font-weight:500; }
+
+/* 图片上传区 */
+.img-drop-zone {
+  position: relative; width: 100%; height: 120px; border-radius: 6px;
+  border: 1.5px dashed #1a3a5c; background: #0d1117; cursor: pointer;
+  overflow: hidden; margin-bottom: 2px; transition: border-color .2s;
+}
+.img-drop-zone:hover { border-color: #4cc9f0; }
+.img-drop-zone.has-image { border-style: solid; border-color: #0f3460; }
+.img-drop-zone.drag-over { border-color: #4ade80; background: rgba(74,222,128,0.05); }
+#imgPreview { display: none; width: 100%; height: 100%; object-fit: cover; }
+#imgPreview.visible { display: block; }
+.img-drop-hint {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  font-size: 12px; color: #4cc9f0; pointer-events: none;
+}
+.img-drop-hint.hidden { display: none; }
+.img-drop-icon { font-size: 22px; line-height: 1; }
+
+/* 预设图片网格 */
+.preset-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;
+}
+.preset-thumb {
+  aspect-ratio: 4/3; border-radius: 4px; cursor: pointer; overflow: hidden;
+  border: 1.5px solid transparent; transition: border-color .15s; background: #0d1117;
+}
+.preset-thumb:hover { border-color: #4cc9f0; }
+.preset-thumb.active { border-color: #4ade80; }
+.preset-thumb canvas { width: 100%; height: 100%; display: block; }
+
+/* 碎片数量选择 */
+.nop-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px;
+}
+.nop-btn {
+  background: #1a1a2e; border: 1px solid #222; color: #888;
+  border-radius: 5px; padding: 5px 0; font-size: 12px; cursor: pointer;
+  transition: all .15s; text-align: center;
+}
+.nop-btn:hover { border-color: #4cc9f0; color: #4cc9f0; }
+.nop-btn.active { background: #0f3460; border-color: #4cc9f0; color: #4cc9f0; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>拼图存档系统</h1>
+  <span class="badge">阶段五 · localStorage</span>
+  <span class="badge green">自动存档</span>
+  <span class="badge amber" id="timerBadge">0:00</span>
+  <span class="hint" style="margin-left:4px;">滚轮旋转 · 拖拽拼合 · 进度自动保存</span>
+</header>
+
+<div class="layout">
+  <div class="game-area"><canvas id="gameCanvas"></canvas></div>
+
+  <div class="sidebar">
+
+    <!-- 新游戏配置 -->
+    <div class="section">
+      <h3>新游戏</h3>
+      <div id="imgDropZone" class="img-drop-zone" onclick="document.getElementById('imgFileInput').click()">
+        <canvas id="imgPreview" width="268" height="120"></canvas>
+        <div id="imgDropHint" class="img-drop-hint">
+          <div class="img-drop-icon">↑</div>
+          <div>点击或拖入图片</div>
+          <div style="font-size:10px;color:#546e7a;margin-top:2px;">JPG · PNG · WEBP</div>
+        </div>
+      </div>
+      <input type="file" id="imgFileInput" accept="image/*" style="display:none" onchange="handleImageFile(event)">
+      <div style="font-size:11px;color:#546e7a;margin:8px 0 5px;">或选择预设图片</div>
+      <div id="presetGrid" class="preset-grid"></div>
+      <div style="font-size:11px;color:#546e7a;margin:10px 0 5px;">碎片数量</div>
+      <div id="nopGrid" class="nop-grid">
+        <button class="nop-btn" data-rows="2" data-cols="3" onclick="selectNop(this)">6</button>
+        <button class="nop-btn" data-rows="2" data-cols="4" onclick="selectNop(this)">8</button>
+        <button class="nop-btn" data-rows="3" data-cols="4" onclick="selectNop(this)">12</button>
+        <button class="nop-btn" data-rows="3" data-cols="5" onclick="selectNop(this)">15</button>
+        <button class="nop-btn active" data-rows="4" data-cols="5" onclick="selectNop(this)">20</button>
+        <button class="nop-btn" data-rows="4" data-cols="6" onclick="selectNop(this)">24</button>
+        <button class="nop-btn" data-rows="5" data-cols="7" onclick="selectNop(this)">35</button>
+        <button class="nop-btn" data-rows="6" data-cols="8" onclick="selectNop(this)">48</button>
+        <button class="nop-btn" data-rows="7" data-cols="10" onclick="selectNop(this)">70</button>
+        <button class="nop-btn" data-rows="9" data-cols="12" onclick="selectNop(this)">108</button>
+      </div>
+      <button class="btn primary" style="width:100%;margin-top:10px;padding:9px;" onclick="startNewGame()">开始拼图</button>
+    </div>
+
+    <!-- 当前进度 -->
+    <div class="section">
+      <h3>当前进度</h3>
+      <div class="info-row"><span class="info-label">规格</span><span class="info-val" id="infSpec">—</span></div>
+      <div class="info-row"><span class="info-label">完成</span><span class="info-val green" id="infDone">0 / 0</span></div>
+      <div class="info-row"><span class="info-label">Groups</span><span class="info-val amber" id="infGroups">0</span></div>
+      <div class="info-row"><span class="info-label">用时</span><span class="info-val" id="infTimer">0:00</span></div>
+      <div class="info-row"><span class="info-label">存档</span><span class="info-val" id="infLastSave">从未</span></div>
+    </div>
+
+    <!-- 存档操作 -->
+    <div class="section">
+      <h3>存档</h3>
+      <div class="btn-row" style="margin-bottom:6px;">
+        <button class="btn primary" onclick="saveGame()">手动存档</button>
+        <button class="btn" onclick="exportSave()">导出</button>
+        <button class="btn" onclick="document.getElementById('importInput').click()">导入</button>
+      </div>
+      <input type="file" id="importInput" accept=".json" style="display:none" onchange="importSave(event)">
+      <div id="saveList" class="save-list"></div>
+    </div>
+
+    <!-- 日志 -->
+    <div class="section">
+      <h3>事件日志</h3>
+      <div id="eventLog" class="event-log"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 阶段五：完整存档系统（整合前四阶段）
+// ============================================================
+
+// ── 常量 ────────────────────────────────────────────────────
+// ── LCG 伪随机数生成器（与阶段二相同，保证可复现）──────────
+function seededRandom(seed) {
+  let s = (seed >>> 0) || 1;
+  return function() {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 0xFFFFFFFF;
+  };
+}
+
+const STORAGE_KEY   = 'jigsaw-saves';    // localStorage 主键
+const CURRENT_KEY   = 'jigsaw-current';  // 当前局
+const SAVE_VERSION  = 1;                 // 存档版本号（用于兼容性校验）
+const MAX_SAVES     = 5;
+const SNAP_DISTANCE = 30;
+const PI2 = Math.PI * 2;
+
+// ── 日志工具 ─────────────────────────────────────────────────
+const logEl = document.getElementById('eventLog');
+function log(msg, cls = 'log-event') {
+  const d = document.createElement('div');
+  d.className = `log-line ${cls}`;
+  d.textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false }) + '  ' + msg;
+  logEl.appendChild(d);
+  while (logEl.children.length > 60) logEl.removeChild(logEl.firstChild);
+}
+
+// ── Tweener ──────────────────────────────────────────────────
+class Tweener {
+  constructor(obj, prop, to, ms, cb) {
+    this.obj = obj; this.prop = prop;
+    this.from = obj[prop]; this.to = to;
+    this.ms = ms; this.t0 = performance.now();
+    this.done = false; this.cb = cb || null;
+  }
+  tick(now) {
+    let t = Math.min(1, (now - this.t0) / this.ms);
+    t = 1 - Math.pow(1 - t, 3);
+    this.obj[this.prop] = this.from + (this.to - this.from) * t;
+    if (t >= 1) { this.obj[this.prop] = this.to; this.done = true; this.cb && this.cb(); }
+    return this.done;
+  }
+}
+
+// ── gap 计算（同阶段四）──────────────────────────────────────
+function measureGap(piece, anchor, angleDeg, pw, ph) {
+  let gx = (piece.col - anchor.col) * pw;
+  let gy = (piece.row - anchor.row) * ph;
+  if      (angleDeg === 90)  [gx, gy] = [-gy,  gx];
+  else if (angleDeg === 180) [gx, gy] = [-gx, -gy];
+  else if (angleDeg === 270) [gx, gy] = [ gy, -gx];
+  return { gx, gy };
+}
+
+// ── Group ────────────────────────────────────────────────────
+class Group {
+  constructor(id, refPiece) {
+    this.id = id;
+    this.refPiece = refPiece;
+    this.members = [refPiece];
+    this.hue = (id * 53 + 200) % 360;
+    refPiece.group = this;
+  }
+  get length() { return this.members.length; }
+  move(dx, dy) { this.members.forEach(m => { m.x += dx; m.y += dy; }); }
+  setAngle(a, deg) { this.members.forEach(m => { m.angle = a; m.angleDeg = deg; }); }
+  raise(all) {
+    const maxZ = Math.max(...all.map(p => p.zOrder));
+    let z = maxZ + 1;
+    this.members.forEach(m => m.zOrder = z++);
+  }
+  mergeWith(other, allGroups) {
+    if (other === this) return;
+    other.members.forEach(m => { m.group = this; this.members.push(m); });
+    log(`Group#${other.id} 并入 Group#${this.id}，现 ${this.length} 块`, 'log-snap');
+    const i = allGroups.indexOf(other);
+    if (i >= 0) allGroups.splice(i, 1);
+  }
+}
+
+// ── Piece ────────────────────────────────────────────────────
+class Piece {
+  constructor(id, row, col, x, y, pw, ph) {
+    this.id = id; this.row = row; this.col = col;
+    this.x = x; this.y = y; this.pw = pw; this.ph = ph;
+    this.width = pw - 4; this.height = ph - 4;
+    this.angle = 0; this.angleDeg = 0;
+    this.zOrder = id; this.group = null;
+    this._tweens = []; this.hue = (id * 41 + 100) % 360;
+  }
+  isTweening() { return this._tweens.length > 0; }
+  tweenTo(prop, to, ms = 240, cb) {
+    this._tweens = this._tweens.filter(t => t.prop !== prop);
+    this._tweens.push(new Tweener(this, prop, to, ms, cb));
+  }
+  updateTweens(now) { this._tweens = this._tweens.filter(t => !t.tick(now)); }
+  rotate() {
+    if (this.isTweening()) return;
+    const target = this.angle + Math.PI / 2;
+    this.tweenTo('angle', target, 220, () => {
+      const norm = ((this.angle % PI2) + PI2) % PI2;
+      this.angleDeg = Math.round(norm / (Math.PI / 2)) * 90 % 360;
+      this.angle = this.angleDeg * Math.PI / 180;
+    });
+  }
+  raise(all) {
+    if (this.group) { this.group.raise(all); }
+    else { const mz = Math.max(...all.map(p => p.zOrder)); this.zOrder = mz + 1; }
+  }
+  containsPoint(px, py) {
+    const dx = px - this.x, dy = py - this.y;
+    const c = Math.cos(-this.angle), s = Math.sin(-this.angle);
+    return Math.abs(dx * c - dy * s) <= this.width / 2 + 2 &&
+           Math.abs(dx * s + dy * c) <= this.height / 2 + 2;
+  }
+  join(nb, allPieces, allGroups) {
+    const { gx, gy } = measureGap(this, nb, nb.angleDeg, this.pw, this.ph);
+    const dx = (nb.x + gx) - this.x, dy = (nb.y + gy) - this.y;
+    if (this.group) this.group.move(dx, dy);
+    else { this.x += dx; this.y += dy; }
+    this.angle = nb.angle; this.angleDeg = nb.angleDeg;
+    if (this.group) this.group.setAngle(nb.angle, nb.angleDeg);
+    if (this.group && nb.group) {
+      const big   = this.group.length >= nb.group.length ? this.group   : nb.group;
+      const small = this.group.length >= nb.group.length ? nb.group : this.group;
+      big.mergeWith(small, allGroups);
+    } else if (this.group) {
+      nb.group = this.group; this.group.members.push(nb);
+    } else if (nb.group) {
+      this.group = nb.group; nb.group.members.push(this);
+    } else {
+      const g = new Group(this.id, nb);
+      allGroups.push(g); this.group = g; g.members.push(this);
+    }
+    log(`Piece#${this.id}→#${nb.id} 吸附成功`, 'log-snap');
+  }
+}
+
+function trySnap(piece, allPieces, allGroups) {
+  const norm = ((piece.angle % PI2) + PI2) % PI2;
+  const nearDeg = Math.round(norm / (Math.PI / 2)) * 90 % 360;
+  const nearRad = nearDeg * Math.PI / 180;
+  if (Math.abs(norm - nearRad) > 0.25) return false;
+  const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }];
+  for (const { dr, dc } of dirs) {
+    const nb = allPieces.find(p =>
+      p !== piece && p.row === piece.row + dr && p.col === piece.col + dc &&
+      !(piece.group && piece.group === p.group) &&
+      Math.abs(p.angle - nearRad) < 0.25
+    );
+    if (!nb) continue;
+    const { gx, gy } = measureGap(piece, nb, nb.angleDeg, piece.pw, piece.ph);
+    const err = Math.hypot(piece.x - nb.x - gx, piece.y - nb.y - gy);
+    if (err < SNAP_DISTANCE) {
+      piece.angle = nearRad; piece.angleDeg = nearDeg;
+      piece.join(nb, allPieces, allGroups);
+      return true;
+    }
+  }
+  return false;
+}
+
+// ── 计时器 ───────────────────────────────────────────────────
+const timer = {
+  elapsed: 0,       // 累计秒数（已完成的）
+  startAt: null,    // 当前段开始时间（null = 暂停）
+  start()  { if (!this.startAt) this.startAt = Date.now(); },
+  pause()  { if (this.startAt) { this.elapsed += (Date.now() - this.startAt) / 1000; this.startAt = null; } },
+  current(){ return this.elapsed + (this.startAt ? (Date.now() - this.startAt) / 1000 : 0); },
+  reset()  { this.elapsed = 0; this.startAt = null; },
+  format(s){ s = Math.round(s); const m = Math.floor(s / 60); return m + ':' + String(s % 60).padStart(2, '0'); }
+};
+
+// ============================================================
+// 核心：存档系统
+// ============================================================
+
+// ── serialize：把当前游戏状态序列化为 JSON 对象 ─────────────
+// 对应源码 updateRecord() + puzzle.record
+function serialize(gameState) {
+  const { pieces, groups, rows, cols, seed, pw, ph } = gameState;
+
+  return {
+    ver:    SAVE_VERSION,
+    rows, cols, seed,
+    pw, ph,
+    timer:  Math.round(timer.current()),       // 整数秒
+    ts:     Date.now(),                        // 存档时间戳
+
+    // 每块只存最少必要信息
+    // x/y 保留整数（减小体积）
+    // a  = angleDeg（0/90/180/270，1-2位数）
+    // g  = groupId（-1 表示无组）
+    pieces: pieces.map(p => ({
+      id: p.id,
+      x:  Math.round(p.x),
+      y:  Math.round(p.y),
+      a:  p.angleDeg,
+      g:  p.group ? p.group.id : -1,
+    })),
+
+    // Group 只存 id、基准块 id 和成员 id 列表
+    groups: groups.map(g => ({
+      id:  g.id,
+      ref: g.refPiece.id,
+      m:   g.members.map(m => m.id),
+    })),
+
+    // 初始角度表（aseed 生成，用于 rotatable 模式复现）
+    initialAngles: gameState.initialAngles || null,
+  };
+}
+
+// ── restore：从 JSON 对象还原完整游戏状态 ───────────────────
+// 对应源码 restoreGame()
+function restore(saveData, canvas) {
+  // ① 版本校验
+  if (!saveData || saveData.ver !== SAVE_VERSION) {
+    log('存档版本不兼容，无法加载', 'log-delete');
+    return null;
+  }
+
+  const { rows, cols, seed, pw, ph } = saveData;
+
+  // ② 重建所有 Piece 对象（使用存档中的 x/y/angle）
+  const pieces = saveData.pieces.map(pd => {
+    const row = Math.floor(pd.id / cols);
+    const col = pd.id % cols;
+    const p = new Piece(pd.id, row, col, pd.x, pd.y, pw, ph);
+    p.angleDeg = pd.a;
+    p.angle    = pd.a * Math.PI / 180;
+    return p;
+  });
+
+  // ③ 重建 Group（必须在 Piece 都建好后才能做）
+  // 用 id → Piece 的 Map 快速查找
+  const pieceMap = new Map(pieces.map(p => [p.id, p]));
+  const groups = [];
+
+  for (const gd of saveData.groups) {
+    const refPiece = pieceMap.get(gd.ref);
+    if (!refPiece) continue;
+
+    const g = new Group(gd.id, refPiece);
+    groups.push(g);
+
+    // 把其余成员也加入组
+    for (const mid of gd.m) {
+      if (mid === gd.ref) continue; // refPiece 已在构造函数中加入
+      const member = pieceMap.get(mid);
+      if (member) { member.group = g; g.members.push(member); }
+    }
+
+    // 恢复 hue（保持视觉一致）
+    g.hue = (gd.id * 53 + 200) % 360;
+  }
+
+  // ④ 恢复计时器
+  timer.reset();
+  timer.elapsed = saveData.timer || 0;
+  timer.start();
+
+  log(`存档加载成功：${rows}×${cols}，${pieces.length} 块，用时 ${timer.format(saveData.timer)}`, 'log-load');
+
+  return { pieces, groups, rows, cols, seed, pw, ph, initialAngles: saveData.initialAngles || null };
+}
+
+// ── localStorage 读写 ────────────────────────────────────────
+
+// 读取所有存档槽（返回数组，按时间戳倒序）
+function loadAllSaves() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+
+// 写入存档槽列表
+function writeAllSaves(saves) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(saves)); }
+  catch (e) { log('存档写入失败：' + e.message, 'log-delete'); }
+}
+
+// 保存当前局进度到指定槽（saveName 可选）
+function saveToSlot(gameState, saveName) {
+  const data = serialize(gameState);
+  data.name = saveName || ('存档 ' + new Date().toLocaleString('zh-CN', { hour12: false }));
+
+  // 生成缩略图（将画布缩小到 88×68）
+  const thumb = generateThumb(gameState, 88, 68);
+  data.thumb = thumb;
+
+  let saves = loadAllSaves();
+
+  // 查找是否已有同名存档（覆盖）
+  const idx = saves.findIndex(s => s.name === data.name);
+  if (idx >= 0) saves[idx] = data;
+  else {
+    saves.unshift(data);
+    if (saves.length > MAX_SAVES) saves = saves.slice(0, MAX_SAVES);
+  }
+
+  writeAllSaves(saves);
+
+  // 同时更新"当前局"快照（用于自动恢复）
+  try { localStorage.setItem(CURRENT_KEY, JSON.stringify(data)); }
+  catch (e) {}
+
+  log(`手动存档：${data.name}`, 'log-save');
+  document.getElementById('infLastSave').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  renderSaveList(saves, gameState);
+  renderJsonPreview(data);
+}
+
+// 自动存档（每次放下拼图块后触发）
+function autoSave(gameState) {
+  const data = serialize(gameState);
+  data.name  = '__auto__';
+  data.thumb = generateThumb(gameState, 88, 68);
+  try { localStorage.setItem(CURRENT_KEY, JSON.stringify(data)); }
+  catch (e) { log('自动存档失败', 'log-delete'); return; }
+  document.getElementById('infLastSave').textContent =
+    '自动 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false });
+}
+
+// 从指定存档槽加载
+function loadFromSlot(saveData, canvas) {
+  const state = restore(saveData, canvas);
+  if (!state) return null;
+  renderSaveList(loadAllSaves(), state);
+  renderJsonPreview(saveData);
+  return state;
+}
+
+// 删除存档槽
+function deleteSave(saveName, gameState) {
+  let saves = loadAllSaves().filter(s => s.name !== saveName);
+  writeAllSaves(saves);
+  log(`删除存档：${saveName}`, 'log-delete');
+  renderSaveList(saves, gameState);
+}
+
+// ── 缩略图生成 ───────────────────────────────────────────────
+function generateThumb(gameState, tw, th) {
+  const c = document.createElement('canvas');
+  c.width = tw; c.height = th;
+  const ctx = c.getContext('2d');
+  const { pieces, groups, rows, cols, pw, ph } = gameState;
+
+  // 背景
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, tw, th);
+
+  // 计算缩放比（让拼图区域适配缩略图）
+  const puzzleW = cols * pw, puzzleH = rows * ph;
+  const scaleX = (tw - 4) / puzzleW, scaleY = (th - 4) / puzzleH;
+  const scale  = Math.min(scaleX, scaleY) * 0.9;
+  const ox = (tw - puzzleW * scale) / 2;
+  const oy = (th - puzzleH * scale) / 2;
+
+  ctx.save();
+  ctx.translate(ox, oy);
+  ctx.scale(scale, scale);
+
+  // 绘制缩略图（优先用真实图片）
+  const img = gameState.image;
+  for (const p of pieces) {
+    const cx = p.col * pw + pw / 2, cy = p.row * ph + ph / 2;
+    const px2 = cx - pw/2 + 2, py2 = cy - ph/2 + 2, pw2 = pw-4, ph2 = ph-4;
+    if (img) {
+      // 计算图片裁剪区域（cover 方式）
+      const imgScale = Math.max((cols*pw)/img.width, (rows*ph)/img.height);
+      const dispW = img.width*imgScale, dispH = img.height*imgScale;
+      const offX = ((cols*pw)-dispW)/2, offY = ((rows*ph)-dispH)/2;
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(px2,py2,pw2,ph2,2); ctx.clip();
+      ctx.drawImage(img, offX+p.col*pw, offY+p.row*ph, pw, ph, px2, py2, pw2, ph2);
+      ctx.restore();
+    } else {
+      const grpHue = p.group ? p.group.hue : p.hue;
+      ctx.fillStyle = `hsla(${grpHue},55%,40%,0.9)`;
+      ctx.beginPath(); ctx.roundRect(px2,py2,pw2,ph2,2); ctx.fill();
+    }
+  }
+  ctx.restore();
+
+  return c.toDataURL('image/jpeg', 0.7);
+}
+
+// ── 导出 / 导入 ──────────────────────────────────────────────
+function exportSave() {
+  const data = serialize(currentGameState);
+  data.name = 'jigsaw-export-' + Date.now();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jigsaw-save.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  log('导出存档文件', 'log-save');
+}
+
+function importSave(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const state = loadFromSlot(data, canvas);
+      if (state) {
+        currentGameState = state;
+        log('从文件导入存档', 'log-load');
+      }
+    } catch (err) {
+      log('导入失败：' + err.message, 'log-delete');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ── UI：存档列表渲染 ─────────────────────────────────────────
+function renderSaveList(saves, gameState) {
+  const el = document.getElementById('saveList');
+  if (!saves.length) { el.innerHTML = '<div class="save-empty">暂无存档</div>'; return; }
+
+  el.innerHTML = '';
+  saves.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'save-card';
+    const completed = s.pieces ? s.pieces.filter(p => p.g !== -1).length : 0;
+    const total = s.pieces ? s.pieces.length : 0;
+    const percent = total ? Math.round(completed / total * 100) : 0;
+
+    const dateStr = new Date(s.ts || 0).toLocaleString('zh-CN', { hour12: false });
+    const safeName = (s.name || '').replace(/'/g, "\\'");
+    card.innerHTML =
+      '<img class="save-thumb" src="' + (s.thumb || '') + '" style="background:#0d1117">' +
+      '<div class="save-info">' +
+        '<div class="save-name">' + (s.name || '') + '</div>' +
+        '<div class="save-meta">' + s.rows + '×' + s.cols + ' · ' + timer.format(s.timer || 0) + ' · ' + percent + '%</div>' +
+        '<div class="save-meta">' + dateStr + '</div>' +
+      '</div>' +
+      '<button class="save-del" title="删除此存档" onclick="event.stopPropagation();deleteSave(\'' + safeName + '\',currentGameState)">✕</button>';
+    card.addEventListener('click', () => {
+      const state = loadFromSlot(s, canvas);
+      if (state) { currentGameState = state; updatePanel(); }
+    });
+    el.appendChild(card);
+  });
+}
+
+// ── JSON 预览 ────────────────────────────────────────────────
+function renderJsonPreview(data) {
+  const el = document.getElementById('jsonPreview');
+  // 只展示摘要（避免内容太长）
+  const preview = {
+    ver: data.ver,
+    rows: data.rows, cols: data.cols, seed: data.seed,
+    timer: data.timer,
+    pieces_count: data.pieces?.length,
+    groups_count: data.groups?.length,
+    sample_piece: data.pieces?.[0],
+    sample_group: data.groups?.[0],
+  };
+  el.textContent = JSON.stringify(preview, null, 2);
+}
+
+// ── 面板更新 ─────────────────────────────────────────────────
+function updatePanel() {
+  if (!currentGameState) return;
+  const { pieces, groups, rows, cols, seed } = currentGameState;
+  const inGroup = pieces.filter(p => p.group).length;
+  const maxG = groups.reduce((m, g) => Math.max(m, g.length), 0);
+  document.getElementById('infSpec').textContent  = `${rows} × ${cols} = ${pieces.length} 块`;
+  document.getElementById('infDone').textContent  = `${inGroup} / ${pieces.length}`;
+  document.getElementById('infGroups').textContent = groups.length + (pieces.filter(p=>!p.group).length > 0 ? ` (+${pieces.filter(p=>!p.group).length}散)` : '');
+  const t = timer.format(timer.current());
+  document.getElementById('infTimer').textContent = t;
+  document.getElementById('timerBadge').textContent = t;
+}
+
+// ============================================================
+// 游戏初始化
+// ============================================================
+const canvas = document.getElementById('gameCanvas');
+canvas.width  = canvas.parentElement.clientWidth;
+canvas.height = canvas.parentElement.clientHeight;
+const ctx = canvas.getContext('2d');
+
+let currentGameState = null;
+
+function buildGame(rows, cols, seed) {
+  const PW = Math.min(Math.floor((canvas.width * 0.7) / cols), 120);
+  const PH = Math.round(PW * 0.8);
+  const pw = PW, ph = PH;
+  const ox = (canvas.width  - cols * pw) / 2;
+  const oy = (canvas.height - rows * ph) / 2;
+  const pieces = [], groups = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const id = r * cols + c;
+    pieces.push(new Piece(id, r, c, ox + c * pw + pw / 2, oy + r * ph + ph / 2, pw, ph));
+  }
+  return { pieces, groups, rows, cols, seed, pw, ph, ox, oy };
+}
+
+// ── 与原始 jigex 一致的散布算法 ─────────────────────────────
+//
+// 原始 scatter() 四大特点完整复现：
+//
+// ① 螺旋填格：从画布左上角出发，向右→下→左→上顺时针绕圈，
+//    每圈缩小，直到所有块都有了网格格子，形成由外到内的螺旋
+//
+// ② sortOrder 排列：每块有一个由种子决定的 sortOrder 值，
+//    散布前按此排序，且保证相邻块不被连续放入同一格子附近，
+//    让相邻块分散在画布不同区域，视觉上没有规律
+//
+// ③ initialAngles 初始角度：由独立的 aseed 生成，
+//    四个方向（0°/90°/180°/270°）各 25% 均匀概率，
+//    只在 rotatable=true 时生效
+//
+// ④ homePos 微偏移：每格中心加 ±6.25% 块宽的随机抖动，
+//    避免所有块机械地落在格子正中心，存入 homePos 供吸附修正
+
+function scatterPieces(state) {
+  const { pieces, rows, cols, seed, pw, ph } = state;
+
+  // 重置所有块状态
+  state.groups.length = 0;
+  pieces.forEach(p => {
+    p.group = null; p.angleDeg = 0; p.angle = 0;
+    p.zOrder = p.id; p._tweens = []; p.homePos = null;
+  });
+
+  const W = canvas.width, H = canvas.height;
+
+  // ─────────────────────────────────────────────────────────────
+  // ① 计算螺旋网格尺寸（对应原始 S/C/w/P 计算）
+  //
+  //   原始：S = p*(w/(floor(w)+E))，即把画布宽度均分成
+  //   "恰好能放下"的格数，每格略宽于一块（自然留出间隙）
+  // ─────────────────────────────────────────────────────────────
+  // 每格比块稍大（1.05 倍），对应原始 p*1.05/numCols 的效果
+  const cellW = pw * 1.05;
+  const cellH = ph * 1.05;
+
+  // 能放几列几行（小数 >=0.5 进一，对应原始 E/k 判断）
+  const rawCols = W / cellW;
+  const rawRows = H / cellH;
+  const gridCols = Math.floor(rawCols) + ((rawCols - Math.floor(rawCols)) >= 0.5 ? 1 : 0);
+  const gridRows = Math.floor(rawRows) + ((rawRows - Math.floor(rawRows)) >= 0.5 ? 1 : 0);
+
+  // 格子中心间距（把画布均分）
+  const stepX = W / gridCols;
+  const stepY = H / gridRows;
+
+  // ─────────────────────────────────────────────────────────────
+  // ② 生成螺旋顺序的格子坐标（对应原始 j 状态机）
+  //
+  //   原始用 j=3/1/2/0 驱动一个顺时针螺旋游标：
+  //     j=3: 向右   j=1: 向下   j=2: 向左   j=0: 向上
+  //   每走完一边就把对应边界内缩一格，形成由外到内的螺旋
+  //
+  //   等价实现：逐层剥洋葱，每层按 上→右→下→左 顺序输出
+  // ─────────────────────────────────────────────────────────────
+  const gridPositions = [];
+  let left = 0, right = gridCols - 1, top = 0, bottom = gridRows - 1;
+
+  while (left <= right && top <= bottom) {
+    // 上边：左 → 右（对应 j=3 向右走）
+    for (let x = left; x <= right; x++)
+      gridPositions.push({ x: x * stepX + stepX / 2, y: top * stepY + stepY / 2 });
+    top++;
+
+    // 右边：上 → 下（对应 j=1 向下走）
+    for (let y = top; y <= bottom; y++)
+      gridPositions.push({ x: right * stepX + stepX / 2, y: y * stepY + stepY / 2 });
+    right--;
+
+    // 下边：右 → 左（对应 j=2 向左走）
+    if (top <= bottom) {
+      for (let x = right; x >= left; x--)
+        gridPositions.push({ x: x * stepX + stepX / 2, y: bottom * stepY + stepY / 2 });
+      bottom--;
+    }
+
+    // 左边：下 → 上（对应 j=0 向上走）
+    if (left <= right) {
+      for (let y = bottom; y >= top; y--)
+        gridPositions.push({ x: left * stepX + stepX / 2, y: y * stepY + stepY / 2 });
+      left++;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ③ 生成 sortOrder 序列（对应原始 getScatterSequence）
+  //
+  //   每块的 sortOrder 由种子随机数决定（原始在 knife.cut 时赋值）
+  //   排列规则：sortOrder 降序取出（n.pop），且尽量不把相邻块
+  //   连续放入——若与上一块相邻则 n.unshift 推回头部，最多重试5次
+  // ─────────────────────────────────────────────────────────────
+  const rand = seededRandom(seed);
+  const pool = pieces
+    .map(p => ({ piece: p, order: rand() }))
+    .sort((a, b) => a.order - b.order); // 升序，pop 时取最大
+
+  const sequence = [];
+  let lastPiece = null;
+  let retries   = 0;
+
+  while (pool.length > 0) {
+    const item = pool.pop();
+    const adjacent = lastPiece && isAdjacent(item.piece, lastPiece);
+
+    if (!adjacent || retries >= 5) {
+      sequence.push(item.piece);
+      lastPiece = item.piece;
+      retries   = 0;
+    } else {
+      pool.unshift(item); // 推回头部，下次 pop 不会再取到它
+      retries++;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ④ 初始角度（对应原始 initialAngles + aseed）
+  //
+  //   使用与位置种子不同的独立随机序列（aseed）
+  //   r>=.75 → 0°   r>=.50 → 90°   r>=.25 → 180°   else → 270°
+  //   四个方向各 25% 均匀分布
+  // ─────────────────────────────────────────────────────────────
+  const angleRand = seededRandom(seed ^ 0xA5A5A5A5);
+  const initialAngles = pieces.map(() => {
+    const r = angleRand();
+    if (r >= 0.75) return   0;
+    if (r >= 0.50) return  90;
+    if (r >= 0.25) return 180;
+    return 270;
+  });
+  state.initialAngles = initialAngles;
+
+  // ─────────────────────────────────────────────────────────────
+  // ⑤ 分配位置并加微偏移（对应原始 Z/$  homePos 赋值）
+  //
+  //   每格中心加 ±(random × cellW × Q) 的随机抖动
+  //   Q = 0.0625（普通模式 ±6.25% 块宽），让散布看起来自然
+  //   结果存入 homePos 供后续吸附修正参考
+  // ─────────────────────────────────────────────────────────────
+  const Q = 0.0625;
+  const microRand = seededRandom(seed ^ 0x1234ABCD);
+
+  sequence.forEach((piece, i) => {
+    // 格子不够时循环复用（理论上 gridCols×gridRows >= pieces.length）
+    const pos = gridPositions[i % gridPositions.length];
+
+    const signX = microRand() >= 0.5 ? 1 : -1;
+    const signY = microRand() >= 0.5 ? 1 : -1;
+    const offX  = signX * microRand() * pw * Q;
+    const offY  = signY * microRand() * ph * Q;
+
+    // 边界夹紧：确保块不超出画布
+    piece.x = Math.max(pw / 2 + 2, Math.min(W - pw / 2 - 2, pos.x + offX));
+    piece.y = Math.max(ph / 2 + 2, Math.min(H - ph / 2 - 2, pos.y + offY));
+    piece.homePos = { x: piece.x, y: piece.y };
+
+    // 初始角度
+    const deg    = initialAngles[piece.id] ?? 0;
+    piece.angleDeg = deg;
+    piece.angle    = deg * Math.PI / 180;
+  });
+
+  timer.reset(); timer.start();
+  log('新游戏 ' + rows + 'x' + cols + ' (' + pieces.length + '块) 螺旋散布完成', 'log-event');
+}
+// 判断两块是否相邻（上下左右4方向）
+function isAdjacent(a, b) {
+  return (Math.abs(a.row - b.row) === 1 && a.col === b.col) ||
+         (Math.abs(a.col - b.col) === 1 && a.row === b.row);
+}
+
+// ── 图片与配置状态 ────────────────────────────────────────────
+let currentImage    = null;   // HTMLImageElement 或 null
+let selectedRows    = 4;
+let selectedCols    = 5;
+let selectedPreset  = -1;     // -1 = 用户上传
+
+// ── 预设图片生成（程序化，无需外部资源）────────────────────────
+const PRESETS = [
+  { name: '海洋', draw: makeOceanImg   },
+  { name: '森林', draw: makeForestImg  },
+  { name: '城市', draw: makeCityImg    },
+  { name: '星空', draw: makeStarImg    },
+];
+
+function makeOceanImg(w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  const sky = ctx.createLinearGradient(0,0,0,h*.45);
+  sky.addColorStop(0,'#1a4080'); sky.addColorStop(1,'#5ca8e0');
+  ctx.fillStyle = sky; ctx.fillRect(0,0,w,h*.45);
+  const sea = ctx.createLinearGradient(0,h*.45,0,h);
+  sea.addColorStop(0,'#1e6fa8'); sea.addColorStop(1,'#0a2a50');
+  ctx.fillStyle = sea; ctx.fillRect(0,h*.45,w,h*.55);
+  // 太阳
+  ctx.fillStyle='#ffe066'; ctx.beginPath(); ctx.arc(w*.72,h*.18,w*.07,0,Math.PI*2); ctx.fill();
+  // 波浪
+  for (let i=0;i<5;i++) {
+    const wy = h*(.46+i*.08);
+    ctx.strokeStyle='rgba(255,255,255,'+(0.15+i*.04)+')'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(0,wy);
+    for (let x=0;x<=w;x+=w/8) ctx.quadraticCurveTo(x+w/16,wy-(4+i*2),x+w/8,wy);
+    ctx.stroke();
+  }
+  // 云
+  ctx.fillStyle='rgba(255,255,255,0.85)';
+  [[.15,.12],[.5,.08],[.78,.2]].forEach(([cx,cy])=>{
+    ctx.beginPath(); ctx.ellipse(w*cx,h*cy,w*.08,h*.04,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(w*(cx+.05),h*(cy-.02),w*.05,h*.03,0,0,Math.PI*2); ctx.fill();
+  });
+  return c;
+}
+
+function makeForestImg(w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  const sky = ctx.createLinearGradient(0,0,0,h*.5);
+  sky.addColorStop(0,'#2d4a1e'); sky.addColorStop(1,'#6aaa40');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,w,h*.5);
+  const gnd = ctx.createLinearGradient(0,h*.5,0,h);
+  gnd.addColorStop(0,'#4a7c2f'); gnd.addColorStop(1,'#1a3a0e');
+  ctx.fillStyle=gnd; ctx.fillRect(0,h*.5,w,h*.5);
+  // 树
+  const drawTree = (tx,ty,th,col) => {
+    ctx.fillStyle=col||'#1a5020';
+    ctx.beginPath(); ctx.moveTo(tx,ty-th); ctx.lineTo(tx+th*.45,ty); ctx.lineTo(tx-th*.45,ty); ctx.fill();
+    ctx.fillStyle=(col||'#1a5020').replace('20','38');
+    ctx.beginPath(); ctx.moveTo(tx,ty-th*1.3); ctx.lineTo(tx+th*.3,ty-th*.5); ctx.lineTo(tx-th*.3,ty-th*.5); ctx.fill();
+  };
+  for (let i=0;i<10;i++) {
+    const tx=w*(.05+i*.1+Math.sin(i*1.3)*.03);
+    const ty=h*(.6+Math.sin(i*2.1)*.06);
+    drawTree(tx,ty,h*(.18+Math.sin(i)*.04), i%3===0?'#0d4010':'#1a6030');
+  }
+  // 光线
+  ctx.fillStyle='rgba(255,220,100,0.06)';
+  for (let i=0;i<5;i++) {
+    ctx.beginPath(); ctx.moveTo(w*(.3+i*.1),0); ctx.lineTo(w*(.1+i*.2),h); ctx.lineWidth=w*.04; ctx.strokeStyle='rgba(255,220,100,0.04)'; ctx.stroke();
+  }
+  return c;
+}
+
+function makeCityImg(w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  const sky = ctx.createLinearGradient(0,0,0,h);
+  sky.addColorStop(0,'#0a0a1a'); sky.addColorStop(.6,'#1a1a3e'); sky.addColorStop(1,'#2a1a0a');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,w,h);
+  // 建筑
+  const bldgs = [[.05,.35,.12,.65],[.1,.2,.09,.8],[.22,.4,.08,.6],[.32,.15,.1,.85],[.45,.3,.07,.7],[.55,.1,.12,.9],[.7,.35,.09,.65],[.82,.25,.1,.75],[.92,.4,.07,.6]];
+  bldgs.forEach(([bx,by,bw,bh])=>{
+    const grad=ctx.createLinearGradient(0,0,w,0);
+    grad.addColorStop(0,'#1a2040'); grad.addColorStop(1,'#2a3060');
+    ctx.fillStyle=grad; ctx.fillRect(w*bx,h*by,w*bw,h*bh);
+    // 窗户
+    ctx.fillStyle='rgba(255,220,100,0.7)';
+    for (let wr=0;wr<Math.floor(h*bh/14);wr++) for (let wc=0;wc<Math.floor(w*bw/10);wc++) {
+      if (Math.random()>.35) ctx.fillRect(w*bx+wc*10+2,h*by+wr*14+3,5,8);
+    }
+  });
+  // 路面倒影
+  const ref=ctx.createLinearGradient(0,h*.88,0,h);
+  ref.addColorStop(0,'rgba(30,40,80,0.6)'); ref.addColorStop(1,'rgba(10,10,30,0.9)');
+  ctx.fillStyle=ref; ctx.fillRect(0,h*.88,w,h*.12);
+  // 星星
+  ctx.fillStyle='rgba(255,255,255,0.8)';
+  for (let i=0;i<40;i++) {
+    const sx=Math.random()*w, sy=Math.random()*h*.3;
+    const sr=Math.random()<.1?.8:.3;
+    ctx.beginPath(); ctx.arc(sx,sy,sr,0,Math.PI*2); ctx.fill();
+  }
+  return c;
+}
+
+function makeStarImg(w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  const bg=ctx.createRadialGradient(w*.5,h*.5,0,w*.5,h*.5,w*.7);
+  bg.addColorStop(0,'#12003a'); bg.addColorStop(.5,'#080028'); bg.addColorStop(1,'#000010');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,w,h);
+  // 星云
+  [[.3,.4,'rgba(80,0,180,0.25)',.25],[.7,.6,'rgba(0,80,180,0.2)',.2],[.5,.3,'rgba(180,0,80,0.15)',.18]].forEach(([nx,ny,nc,nr])=>{
+    const g=ctx.createRadialGradient(w*nx,h*ny,0,w*nx,h*ny,w*nr);
+    g.addColorStop(0,nc); g.addColorStop(1,'transparent');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  });
+  // 星星
+  for (let i=0;i<220;i++) {
+    const sx=Math.random()*w, sy=Math.random()*h;
+    const br=Math.random();
+    const sr=br>.95?1.2:br>.8?.7:.3;
+    ctx.fillStyle='rgba(255,255,255,'+(0.4+br*.6)+')';
+    ctx.beginPath(); ctx.arc(sx,sy,sr,0,Math.PI*2); ctx.fill();
+  }
+  // 银河带
+  ctx.save(); ctx.globalAlpha=.12;
+  const mw=ctx.createLinearGradient(0,h*.2,w,h*.8);
+  mw.addColorStop(0,'transparent'); mw.addColorStop(.3,'rgba(200,200,255,1)'); mw.addColorStop(.7,'rgba(220,200,255,1)'); mw.addColorStop(1,'transparent');
+  ctx.fillStyle=mw;
+  ctx.beginPath(); ctx.ellipse(w*.5,h*.5,w*.5,h*.15,-Math.PI*.15,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+  return c;
+}
+
+// 生成所有预设缩略图
+function initPresets() {
+  const grid = document.getElementById('presetGrid');
+  grid.innerHTML = '';
+  PRESETS.forEach((preset, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'preset-thumb' + (i === 0 ? ' active' : '');
+    wrap.title = preset.name;
+    const tc = document.createElement('canvas');
+    tc.width = 80; tc.height = 60;
+    // 绘制预设图到缩略图 canvas
+    const src = preset.draw(80, 60);
+    tc.getContext('2d').drawImage(src, 0, 0, 80, 60);
+    wrap.appendChild(tc);
+    wrap.addEventListener('click', () => {
+      document.querySelectorAll('.preset-thumb').forEach(t => t.classList.remove('active'));
+      wrap.classList.add('active');
+      selectedPreset = i;
+      // 生成大尺寸预设图并更新预览
+      const full = preset.draw(800, 600);
+      applyImageFromCanvas(full);
+    });
+    grid.appendChild(wrap);
+  });
+  // 默认加载第一个预设
+  selectedPreset = 0;
+  applyImageFromCanvas(PRESETS[0].draw(800, 600));
+}
+
+// 把一个 canvas 作为当前图片源
+function applyImageFromCanvas(srcCanvas) {
+  const img = new Image();
+  img.onload = () => {
+    currentImage = img;
+    drawImgPreview(img);
+  };
+  img.src = srcCanvas.toDataURL('image/jpeg', 0.92);
+}
+
+// 绘制预览缩略图到侧边栏
+function drawImgPreview(img) {
+  const previewCanvas = document.getElementById('imgPreview');
+  const hint = document.getElementById('imgDropHint');
+  const zone = document.getElementById('imgDropZone');
+  const ctx2 = previewCanvas.getContext('2d');
+  const pw = previewCanvas.width, ph = previewCanvas.height;
+  // cover 裁剪
+  const scale = Math.max(pw / img.width, ph / img.height);
+  const sw = pw / scale, sh = ph / scale;
+  const sx = (img.width - sw) / 2, sy = (img.height - sh) / 2;
+  ctx2.clearRect(0, 0, pw, ph);
+  ctx2.drawImage(img, sx, sy, sw, sh, 0, 0, pw, ph);
+  previewCanvas.classList.add('visible');
+  hint.classList.add('hidden');
+  zone.classList.add('has-image');
+}
+
+// 处理用户上传的图片文件
+function handleImageFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      currentImage = img;
+      drawImgPreview(img);
+      selectedPreset = -1;
+      document.querySelectorAll('.preset-thumb').forEach(t => t.classList.remove('active'));
+      log('图片已加载：' + file.name, 'log-event');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+// 拖拽上传
+function initDropZone() {
+  const zone = document.getElementById('imgDropZone');
+  zone.addEventListener('dragover', e => {
+    e.preventDefault(); zone.classList.add('drag-over');
+  });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      const fakeEvent = { target: { files: [file], value: '' } };
+      handleImageFile(fakeEvent);
+    }
+  });
+}
+
+// 碎片数量选择
+function selectNop(btn) {
+  document.querySelectorAll('.nop-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedRows = parseInt(btn.dataset.rows);
+  selectedCols = parseInt(btn.dataset.cols);
+}
+
+// 开始新游戏（替换原 newGame）
+function startNewGame() {
+  const rows = selectedRows, cols = selectedCols;
+  const seed = Math.floor(Math.random() * 999999);
+  currentGameState = buildGame(rows, cols, seed);
+  // 存当前图片到 state
+  currentGameState.image = currentImage;
+  scatterPieces(currentGameState);
+  updatePanel();
+  renderSaveList(loadAllSaves(), currentGameState);
+  log('开始新游戏 ' + rows + '×' + cols + '=' + rows*cols + ' 块', 'log-event');
+}
+
+// 兼容旧调用
+function newGame() { startNewGame(); }
+
+
+function saveGame() { saveToSlot(currentGameState); }
+
+// 尝试恢复自动存档
+function tryRestoreAuto() {
+  try {
+    const raw = localStorage.getItem(CURRENT_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (data.ver !== SAVE_VERSION) return false;
+    // 先构建正确尺寸的游戏框架
+    const state = buildGame(data.rows, data.cols, data.seed);
+    // 再用存档覆盖
+    const restored = restore(data, canvas);
+    if (restored) {
+      // 修正 pw/ph 使用当前画布尺寸（不用存档的旧尺寸）
+      restored.pw = state.pw;
+      restored.ph = state.ph;
+      restored.pieces.forEach(p => { p.pw = state.pw; p.ph = state.ph; p.width = state.pw - 4; p.height = state.ph - 4; });
+      currentGameState = restored;
+      log('恢复上次进度', 'log-load');
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+// 启动
+initPresets();
+initDropZone();
+if (!tryRestoreAuto()) startNewGame();
+renderSaveList(loadAllSaves(), currentGameState);
+
+// ── 交互 ─────────────────────────────────────────────────────
+let captured = null, offX = 0, offY = 0;
+let startX = 0, startY = 0, isDragging = false;
+
+function coords(e) {
+  const r = canvas.getBoundingClientRect();
+  if (e.touches) return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function topAt(x, y) {
+  return [...currentGameState.pieces].sort((a, b) => b.zOrder - a.zOrder).find(p => p.containsPoint(x, y));
+}
+
+canvas.addEventListener('mousedown', e => {
+  const { x, y } = coords(e);
+  const p = topAt(x, y);
+  if (!p) return;
+  captured = p; isDragging = false;
+  offX = p.x - x; offY = p.y - y; startX = x; startY = y;
+  p.raise(currentGameState.pieces);
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!captured) return;
+  const { x, y } = coords(e);
+  if (!isDragging && Math.hypot(x - startX, y - startY) < 4) return;
+  isDragging = true;
+  const nx = x + offX, ny = y + offY;
+  const dx = nx - captured.x, dy = ny - captured.y;
+  if (captured.group) captured.group.move(dx, dy);
+  else { captured.x = nx; captured.y = ny; }
+});
+
+canvas.addEventListener('mouseup', () => {
+  if (!captured) return;
+  if (isDragging) {
+    const snapped = trySnap(captured, currentGameState.pieces, currentGameState.groups);
+    autoSave(currentGameState); // 每次放下自动存档
+    if (snapped) checkComplete();
+  }
+  captured = null; isDragging = false;
+  updatePanel();
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const { x, y } = coords(e);
+  const p = topAt(x, y);
+  if (p) { p.rotate(); setTimeout(() => autoSave(currentGameState), 300); }
+}, { passive: false });
+
+canvas.addEventListener('dblclick', e => {
+  const { x, y } = coords(e);
+  const p = topAt(x, y);
+  if (p) { p.rotate(); setTimeout(() => autoSave(currentGameState), 300); }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  if (captured && isDragging) {
+    trySnap(captured, currentGameState.pieces, currentGameState.groups);
+    autoSave(currentGameState);
+  }
+  captured = null; isDragging = false;
+});
+
+function checkComplete() {
+  const { pieces, groups } = currentGameState;
+  if (groups.length === 1 && groups[0].length === pieces.length) {
+    timer.pause();
+    log(`🎉 拼图完成！用时 ${timer.format(timer.current())}`, 'log-done');
+    saveToSlot(currentGameState, '已完成-' + timer.format(timer.current()));
+  }
+}
+
+// ── 渲染 ─────────────────────────────────────────────────────
+function render(now) {
+  if (!currentGameState) return;
+  const { pieces, groups } = currentGameState;
+  pieces.forEach(p => p.updateTweens(now));
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 目标位置虚线框
+  const { pw, ph, rows, cols } = currentGameState;
+  const ox = (canvas.width  - cols * pw) / 2;
+  const oy = (canvas.height - rows * ph) / 2;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    ctx.strokeRect(ox + c * pw + 2, oy + r * ph + 2, pw - 4, ph - 4);
+  }
+  ctx.setLineDash([]); ctx.restore();
+
+  // 绘制拼图块
+  const img = currentGameState.image;
+  const totalW = cols * pw, totalH = rows * ph;
+  [...pieces].sort((a, b) => a.zOrder - b.zOrder).forEach(p => {
+    ctx.save();
+    ctx.translate(p.x, p.y); ctx.rotate(p.angle);
+    const hw = p.width / 2, hh = p.height / 2;
+    const isSel = p === captured;
+    const grpHue = p.group ? p.group.hue : p.hue;
+
+    // 裁剪路径（圆角矩形）
+    ctx.beginPath(); ctx.roundRect(-hw, -hh, p.width, p.height, 5); ctx.clip();
+
+    if (img) {
+      // 用图片填充：计算该块对应原图的 UV 区域
+      // 图片以 cover 方式适配整个拼图区域
+      const scale = Math.max(totalW / img.width, totalH / img.height);
+      const imgDispW = img.width  * scale;
+      const imgDispH = img.height * scale;
+      const imgOffX  = (totalW - imgDispW) / 2;
+      const imgOffY  = (totalH - imgDispH) / 2;
+      // 该块在图片显示坐标系中的左上角
+      const srcX = imgOffX + p.col * pw;
+      const srcY = imgOffY + p.row * ph;
+      // 画到 [-hw,-hh] 处
+      ctx.drawImage(img, srcX, srcY, pw, ph, -hw, -hh, p.width, p.height);
+      // 选中高亮蒙层
+      if (isSel) {
+        ctx.fillStyle = 'rgba(76,201,240,0.18)';
+        ctx.fillRect(-hw, -hh, p.width, p.height);
+      }
+    } else {
+      // 无图片时用色块
+      ctx.fillStyle = `hsla(${grpHue},${isSel?75:55}%,${isSel?58:42}%,0.93)`;
+      ctx.fillRect(-hw, -hh, p.width, p.height);
+    }
+
+    // 描边
+    ctx.restore(); ctx.save();
+    ctx.translate(p.x, p.y); ctx.rotate(p.angle);
+    ctx.strokeStyle = isSel ? '#4cc9f0' : (p.group ? `hsla(${p.group.hue},70%,65%,0.5)` : 'rgba(255,255,255,0.15)');
+    ctx.lineWidth = isSel ? 2 : 0.8;
+    ctx.beginPath(); ctx.roundRect(-hw, -hh, p.width, p.height, 5); ctx.stroke();
+    ctx.restore();
+  });
+
+  // 拖拽预览
+  if (captured && isDragging) drawSnapPreview();
+}
+
+function drawSnapPreview() {
+  const piece = captured;
+  const { pieces, pw, ph } = currentGameState;
+  const norm = ((piece.angle % PI2) + PI2) % PI2;
+  const nearDeg = Math.round(norm / (Math.PI / 2)) * 90 % 360;
+  const nearRad = nearDeg * Math.PI / 180;
+  if (Math.abs(norm - nearRad) > 0.25) return;
+  const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }];
+  for (const { dr, dc } of dirs) {
+    const nb = pieces.find(p =>
+      p !== piece && p.row === piece.row + dr && p.col === piece.col + dc &&
+      !(piece.group && piece.group === p.group) && Math.abs(p.angle - nearRad) < 0.25
+    );
+    if (!nb) continue;
+    const { gx, gy } = measureGap(piece, nb, nb.angleDeg, piece.pw, piece.ph);
+    const ratio = Math.max(0, 1 - Math.hypot(piece.x - nb.x - gx, piece.y - nb.y - gy) / (SNAP_DISTANCE * 3));
+    if (ratio > 0.1) {
+      ctx.save();
+      ctx.translate(nb.x + gx, nb.y + gy); ctx.rotate(nearRad);
+      ctx.strokeStyle = `rgba(74,222,128,${ratio * 0.85})`;
+      ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.roundRect(-piece.width / 2, -piece.height / 2, piece.width, piece.height, 5); ctx.stroke();
+      ctx.restore(); ctx.setLineDash([]);
+    }
+  }
+}
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  render(now);
+  updatePanel();
+}
+requestAnimationFrame(loop);
+
+window.addEventListener('resize', () => {
+  canvas.width  = canvas.parentElement.clientWidth;
+  canvas.height = canvas.parentElement.clientHeight;
+});
+
+// 页面关闭前自动存档
+window.addEventListener('beforeunload', () => { autoSave(currentGameState); });
+</script>
+</body>
+</html>

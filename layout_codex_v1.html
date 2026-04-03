@@ -1,0 +1,1787 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jigex Spiral Layout Explorer</title>
+<style>
+:root {
+  --paper: #f5eddc;
+  --paper-deep: #efe2c7;
+  --ink: #1f2a32;
+  --muted: #73685b;
+  --line: rgba(47, 74, 88, 0.16);
+  --frame: rgba(31, 42, 50, 0.18);
+  --accent: #0d5a6a;
+  --accent-soft: rgba(13, 90, 106, 0.14);
+  --accent-strong: #11758a;
+  --signal: #c1742c;
+  --signal-soft: rgba(193, 116, 44, 0.16);
+  --success: #2f7d5a;
+  --warn: #b75a2e;
+  --shadow: 0 18px 40px rgba(67, 44, 18, 0.12);
+  --radius-lg: 24px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+  --body-font: "Constantia", "Palatino Linotype", "Book Antiqua", serif;
+  --display-font: "Baskerville Old Face", "Times New Roman", serif;
+  --mono-font: "Cascadia Mono", "Consolas", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.8), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(193, 116, 44, 0.09), transparent 24%),
+    linear-gradient(180deg, #f8f1e3 0%, #efe4cf 100%);
+  color: var(--ink);
+  font-family: var(--body-font);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image:
+    linear-gradient(rgba(31, 42, 50, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 42, 50, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+}
+
+.page {
+  width: min(1380px, calc(100vw - 32px));
+  margin: 24px auto 48px;
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: 28px 28px 26px;
+  border: 1px solid var(--frame);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(140deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.36)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6), transparent 70%);
+  box-shadow: var(--shadow);
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  right: -60px;
+  top: -50px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(17, 117, 138, 0.18), transparent 60%);
+  pointer-events: none;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font: 600 12px/1 var(--mono-font);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.eyebrow::before {
+  content: "";
+  width: 48px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent));
+}
+
+.hero h1 {
+  margin: 0;
+  font: 700 clamp(32px, 4vw, 56px)/0.95 var(--display-font);
+  letter-spacing: 0.02em;
+}
+
+.hero h1 span {
+  color: var(--accent-strong);
+}
+
+.hero p {
+  width: min(760px, 100%);
+  margin: 14px 0 0;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--muted);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 20px;
+  margin-top: 20px;
+  align-items: start;
+}
+
+.panel,
+.stage-card {
+  border: 1px solid var(--frame);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.46)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 65%);
+  box-shadow: var(--shadow);
+}
+
+.panel {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.section {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.44);
+  border: 1px solid rgba(31, 42, 50, 0.08);
+}
+
+.section h2 {
+  margin: 0 0 12px;
+  font: 700 15px/1.1 var(--mono-font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.uploader {
+  position: relative;
+  display: grid;
+  gap: 12px;
+}
+
+.upload-box {
+  position: relative;
+  min-height: 178px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1.5px dashed rgba(13, 90, 106, 0.36);
+  background:
+    linear-gradient(135deg, rgba(17, 117, 138, 0.07), rgba(193, 116, 44, 0.08));
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.upload-box:hover {
+  transform: translateY(-1px);
+  border-color: rgba(17, 117, 138, 0.64);
+}
+
+.upload-box.has-image {
+  border-style: solid;
+  border-color: rgba(47, 125, 90, 0.5);
+}
+
+.upload-box input {
+  display: none;
+}
+
+.upload-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.upload-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.upload-sub {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.preview-frame {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.preview-frame.visible {
+  display: flex;
+}
+
+.preview-frame img {
+  width: 92px;
+  height: 92px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid rgba(31, 42, 50, 0.16);
+  box-shadow: 0 12px 28px rgba(31, 42, 50, 0.12);
+}
+
+.preview-meta {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.slider-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) 64px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.slider-row:last-child {
+  margin-bottom: 0;
+}
+
+.slider-row label {
+  font: 600 12px/1 var(--mono-font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.slider-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.slider-value {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(13, 90, 106, 0.1);
+  text-align: center;
+  font: 700 12px/1 var(--mono-font);
+  color: var(--accent);
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font: 700 12px/1 var(--mono-font);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #f8f2e7;
+  box-shadow: 0 10px 22px rgba(17, 117, 138, 0.2);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(31, 42, 50, 0.14);
+  color: var(--ink);
+}
+
+.choice-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.choice-btn {
+  min-width: 74px;
+  padding: 10px 12px 11px;
+  border-radius: 14px;
+  border: 1px solid rgba(31, 42, 50, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.choice-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(13, 90, 106, 0.32);
+}
+
+.choice-btn.selected {
+  border-color: rgba(13, 90, 106, 0.58);
+  background: linear-gradient(180deg, rgba(13, 90, 106, 0.12), rgba(13, 90, 106, 0.2));
+}
+
+.choice-btn .nop {
+  display: block;
+  font: 700 18px/1 var(--mono-font);
+}
+
+.choice-btn .shape {
+  display: block;
+  margin-top: 6px;
+  font: 600 11px/1 var(--mono-font);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.choice-empty {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(183, 90, 46, 0.08);
+  color: var(--warn);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stat {
+  padding: 12px 13px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(31, 42, 50, 0.1);
+}
+
+.stat .label {
+  margin-bottom: 6px;
+  font: 600 10px/1.2 var(--mono-font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stat .value {
+  font: 700 19px/1.15 var(--mono-font);
+  color: var(--ink);
+}
+
+.stat.accent .value {
+  color: var(--accent-strong);
+}
+
+.stat.signal .value {
+  color: var(--signal);
+}
+
+.legend {
+  display: grid;
+  gap: 10px;
+}
+
+.legend-item {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.legend-swatch {
+  position: relative;
+  height: 12px;
+}
+
+.legend-swatch::before,
+.legend-swatch::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 0;
+  transform: translateY(-50%);
+}
+
+.legend-swatch.grid::before {
+  width: 100%;
+  border-top: 1px dashed rgba(13, 90, 106, 0.36);
+}
+
+.legend-swatch.path::before {
+  width: 100%;
+  border-top: 2px dashed rgba(193, 116, 44, 0.72);
+}
+
+.legend-swatch.path::after {
+  right: 0;
+  left: auto;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid rgba(193, 116, 44, 0.72);
+}
+
+.legend-swatch.subject::before {
+  width: 100%;
+  height: 100%;
+  background: rgba(17, 117, 138, 0.18);
+  border: 1px dashed rgba(13, 90, 106, 0.48);
+  border-radius: 8px;
+}
+
+.legend-swatch.piece::before {
+  width: 100%;
+  height: 100%;
+  background: rgba(17, 117, 138, 0.12);
+  border: 1px solid rgba(31, 42, 50, 0.16);
+  border-radius: 8px;
+}
+
+.stage-card {
+  padding: 18px;
+}
+
+.stage-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.stage-head h2 {
+  margin: 0;
+  font: 700 18px/1.1 var(--mono-font);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.stage-head p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.canvas-shell {
+  position: relative;
+  border-radius: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(31, 42, 50, 0.12);
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.36), transparent 28%),
+    linear-gradient(180deg, #f7f0e5, #efe2ca);
+}
+
+.canvas-shell canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.stage-note {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.log {
+  min-height: 168px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(31, 42, 50, 0.08);
+  font: 12px/1.7 var(--mono-font);
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.log .info {
+  color: var(--accent);
+}
+
+.log .ok {
+  color: var(--success);
+}
+
+.log .warn {
+  color: var(--warn);
+}
+
+@media (max-width: 1120px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    width: min(100vw - 18px, 1380px);
+    margin-top: 12px;
+  }
+
+  .hero,
+  .panel,
+  .stage-card {
+    border-radius: 20px;
+  }
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .stage-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <section class="hero">
+    <div class="eyebrow">Jigex Layout Codex</div>
+    <h1>layout_<span>codex_v1</span>.html</h1>
+    <p>上传图片后，页面会按 <code>jigex-prog.js</code> 的核心链路计算可选碎片数量、缩放主体、生成切块规格，并使用原版思路的螺旋散布算法更新碎片位置。画布上同时显示散布网格、主体区域和虚线螺旋方向。</p>
+  </section>
+
+  <div class="layout">
+    <aside class="panel">
+      <section class="section">
+        <h2>Image</h2>
+        <div class="uploader">
+          <label class="upload-box" id="upload-box">
+            <input id="file-input" type="file" accept="image/*">
+            <div class="upload-copy">
+              <div class="upload-title">Choose a source image</div>
+              <div class="upload-sub">点击选择图片后，页面会自动计算主体缩放比例、可选碎片数量和默认切法。</div>
+            </div>
+            <div class="preview-frame" id="preview-frame">
+              <img id="preview-image" alt="预览图">
+              <div class="preview-meta">
+                <div id="preview-name">未选择文件</div>
+                <div id="preview-size">请先上传图片</div>
+              </div>
+            </div>
+          </label>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Canvas</h2>
+        <div class="slider-row">
+          <label for="canvas-width">Width</label>
+          <input id="canvas-width" type="range" min="760" max="1600" step="20" value="1200">
+          <div class="slider-value" id="canvas-width-value">1200</div>
+        </div>
+        <div class="slider-row">
+          <label for="canvas-height">Height</label>
+          <input id="canvas-height" type="range" min="520" max="1040" step="20" value="720">
+          <div class="slider-value" id="canvas-height-value">720</div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" id="rerun-button" type="button">Re-layout</button>
+          <button class="btn btn-secondary" id="reset-button" type="button">Reset Canvas</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Piece Choices</h2>
+        <div class="choice-grid" id="choice-grid"></div>
+      </section>
+
+      <section class="section">
+        <h2>Stats</h2>
+        <div class="stats" id="stats-grid">
+          <div class="stat accent">
+            <div class="label">Canvas</div>
+            <div class="value" id="stat-canvas">1200×720</div>
+          </div>
+          <div class="stat">
+            <div class="label">Source</div>
+            <div class="value" id="stat-source">-</div>
+          </div>
+          <div class="stat signal">
+            <div class="label">Subject</div>
+            <div class="value" id="stat-subject">-</div>
+          </div>
+          <div class="stat">
+            <div class="label">Pieces</div>
+            <div class="value" id="stat-pieces">-</div>
+          </div>
+          <div class="stat">
+            <div class="label">Rows × Cols</div>
+            <div class="value" id="stat-cut-grid">-</div>
+          </div>
+          <div class="stat">
+            <div class="label">Spiral Grid</div>
+            <div class="value" id="stat-spiral-grid">-</div>
+          </div>
+          <div class="stat">
+            <div class="label">Grid Count</div>
+            <div class="value" id="stat-grid-count">-</div>
+          </div>
+          <div class="stat accent">
+            <div class="label">p × g</div>
+            <div class="value" id="stat-pg">-</div>
+          </div>
+          <div class="stat signal">
+            <div class="label">S × C</div>
+            <div class="value" id="stat-sc">-</div>
+          </div>
+          <div class="stat">
+            <div class="label">Placed</div>
+            <div class="value" id="stat-placed">-</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Legend</h2>
+        <div class="legend">
+          <div class="legend-item">
+            <div class="legend-swatch grid"></div>
+            <div>散布网格，表示螺旋扫描时采用的单元大小。</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-swatch path"></div>
+            <div>螺旋路径，虚线和箭头显示扫描方向与转弯顺序。</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-swatch subject"></div>
+            <div>主体图像区域，散布时会避开这个中心占位带。</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-swatch piece"></div>
+            <div>碎片外框和内层采样区，用来表现原图切块和落位结果。</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Log</h2>
+        <div class="log" id="log-panel"></div>
+      </section>
+    </aside>
+
+    <section class="stage-card">
+      <div class="stage-head">
+        <div>
+          <h2>Spiral Scatter Stage</h2>
+          <p>中心显示主体，四周显示螺旋散布的候选点、路径方向和已落位碎片。</p>
+        </div>
+      </div>
+      <div class="canvas-shell">
+        <canvas id="layout-canvas" width="1200" height="720"></canvas>
+      </div>
+      <div class="stage-note">
+        <div id="stage-caption">等待上传图片。</div>
+        <div id="stage-footnote">布局规则参考 <code>cutChoices</code>、<code>Subject.rescale</code> 和 <code>scatter</code>。</div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const DPR = window.devicePixelRatio || 1;
+const MARGIN = 7;
+const MARGIN_TOTAL = MARGIN * 2;
+const DEFAULT_DESKTOP_NOP = 100;
+
+const state = {
+  canvasW: 1200,
+  canvasH: 720,
+  sourceImage: null,
+  sourceUrl: "",
+  sourceName: "",
+  subject: null,
+  choices: [],
+  selectedChoice: null,
+  layout: null,
+  relayoutNonce: 0
+};
+
+const logPanel = $("log-panel");
+
+function logLine(message, kind) {
+  const line = document.createElement("div");
+  line.className = kind || "";
+  line.textContent = message;
+  logPanel.appendChild(line);
+  logPanel.scrollTop = logPanel.scrollHeight;
+}
+
+function clearLog() {
+  logPanel.innerHTML = "";
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function hashString(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function mulberry32(seed) {
+  let t = seed >>> 0;
+  return function next() {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function formatSize(width, height) {
+  return width && height ? `${Math.round(width)}×${Math.round(height)}` : "-";
+}
+
+function setSliderValues() {
+  $("canvas-width").value = String(state.canvasW);
+  $("canvas-height").value = String(state.canvasH);
+  $("canvas-width-value").textContent = String(state.canvasW);
+  $("canvas-height-value").textContent = String(state.canvasH);
+  $("stat-canvas").textContent = formatSize(state.canvasW, state.canvasH);
+}
+
+function scaleSubject(srcW, srcH, cnvW, cnvH) {
+  let width = srcW;
+  let height = srcH;
+  let area = width * height;
+  const canvasArea = cnvW * cnvH;
+  let scale = 1;
+  let shrunk = false;
+
+  while (area / canvasArea > 0.35 || width > cnvW * 0.9 || height > cnvH * 0.9) {
+    scale -= 0.01;
+    width = srcW * scale;
+    height = srcH * scale;
+    area = width * height;
+    shrunk = true;
+    if (scale <= 0.1) {
+      break;
+    }
+  }
+
+  if (!shrunk) {
+    while (area / canvasArea < 0.35 && width < cnvW * 0.9 && height < cnvH * 0.9) {
+      scale += 0.01;
+      width = srcW * scale;
+      height = srcH * scale;
+      area = width * height;
+      if (scale >= 3) {
+        break;
+      }
+    }
+  }
+
+  return {
+    width: Math.round(width),
+    height: Math.round(height),
+    scale
+  };
+}
+
+function cutChoices(subject, minNop, defNop) {
+  if (!subject) {
+    return [];
+  }
+
+  const results = [];
+  let rows = 0;
+  let cols = 0;
+  let nop = 0;
+  let size = Math.floor(Math.max(subject.width, subject.height) / 3);
+  let selected = false;
+
+  while (nop < 1000 && size > 10) {
+    rows = Math.floor(subject.height / size);
+    cols = Math.floor(subject.width / size);
+    nop = rows * cols;
+
+    if (nop >= 6 && nop >= minNop) {
+      const isSelected = !selected && nop >= defNop;
+      results.push({
+        nop,
+        rows,
+        cols,
+        size,
+        selected: isSelected
+      });
+      if (isSelected) {
+        selected = true;
+      }
+    }
+
+    const nextSizeByRows = Math.floor(subject.height / (rows + 1));
+    const nextSizeByCols = Math.floor(subject.width / (cols + 1));
+    size = Math.max(nextSizeByRows, nextSizeByCols);
+  }
+
+  if (!selected && results.length) {
+    for (let index = results.length - 1; index >= 0; index -= 1) {
+      const item = results[index];
+      if (index === 0 || item.size >= 36 || nop <= minNop) {
+        item.selected = true;
+        break;
+      }
+    }
+  }
+
+  return results;
+}
+
+function defaultChoiceNop() {
+  return DEFAULT_DESKTOP_NOP;
+}
+
+function sideThickness(span, isTab, rng) {
+  const base = isTab ? 0.22 : 0.18;
+  const variance = (rng() - 0.5) * 0.05;
+  return Math.max(8, Math.round(span * (base + variance)));
+}
+
+function buildPieceSpecs(subject, choice, seed) {
+  const rng = mulberry32(seed);
+  const pieces = [];
+  const matrix = Array.from({ length: choice.rows }, () => Array(choice.cols).fill(null));
+  const widthRemainder = subject.width % choice.size;
+  const heightRemainder = subject.height % choice.size;
+  const widthChunk = Math.floor(widthRemainder / choice.cols);
+  const heightChunk = Math.floor(heightRemainder / choice.rows);
+  let widthCarry;
+  let heightCarry = heightRemainder;
+  let extraHeight = heightRemainder % choice.rows;
+  let imgY = 0;
+  let id = 1;
+
+  for (let row = 0; row < choice.rows; row += 1) {
+    let coreH = choice.size;
+    if (heightCarry > 0) {
+      heightCarry -= heightChunk;
+      coreH += heightChunk;
+    }
+    if (extraHeight > 0) {
+      coreH += 1;
+      extraHeight -= 1;
+    }
+
+    let imgX = 0;
+    widthCarry = widthRemainder;
+    let extraWidth = widthRemainder % choice.cols;
+
+    for (let col = 0; col < choice.cols; col += 1) {
+      let coreW = choice.size;
+      if (widthCarry > 0) {
+        widthCarry -= widthChunk;
+        coreW += widthChunk;
+      }
+      if (extraWidth > 0) {
+        coreW += 1;
+        extraWidth -= 1;
+      }
+
+      const piece = {
+        id,
+        row,
+        col,
+        core: {
+          width: coreW,
+          height: coreH,
+          x: 0,
+          y: 0
+        },
+        imgX,
+        imgY,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: 0,
+        homeX: 0,
+        homeY: 0,
+        hasMoved: false,
+        angle: 0,
+        sortOrder: rng(),
+        neighbors: [],
+        edges: {
+          top: {},
+          right: {},
+          bottom: {},
+          left: {}
+        },
+        isEdge: false,
+        colorHue: Math.round(190 + rng() * 145)
+      };
+
+      matrix[row][col] = piece;
+      pieces.push(piece);
+      imgX += coreW;
+      id += 1;
+    }
+
+    imgY += coreH;
+  }
+
+  for (let row = 0; row < choice.rows; row += 1) {
+    for (let col = 0; col < choice.cols; col += 1) {
+      const piece = matrix[row][col];
+      const topBorder = row === 0;
+      const leftBorder = col === 0;
+      const rightBorder = col === choice.cols - 1;
+      const bottomBorder = row === choice.rows - 1;
+
+      if (topBorder) {
+        piece.edges.top = { border: true, tab: false, thickness: 0 };
+      } else {
+        const above = matrix[row - 1][col];
+        piece.edges.top = {
+          border: false,
+          tab: !above.edges.bottom.tab,
+          thickness: above.edges.bottom.thickness
+        };
+      }
+
+      if (leftBorder) {
+        piece.edges.left = { border: true, tab: false, thickness: 0 };
+      } else {
+        const left = matrix[row][col - 1];
+        piece.edges.left = {
+          border: false,
+          tab: !left.edges.right.tab,
+          thickness: left.edges.right.thickness
+        };
+      }
+
+      if (rightBorder) {
+        piece.edges.right = { border: true, tab: false, thickness: 0 };
+      } else {
+        const tab = rng() >= 0.5;
+        piece.edges.right = {
+          border: false,
+          tab,
+          thickness: sideThickness(piece.core.height, tab, rng)
+        };
+      }
+
+      if (bottomBorder) {
+        piece.edges.bottom = { border: true, tab: false, thickness: 0 };
+      } else {
+        const tab = rng() >= 0.5;
+        piece.edges.bottom = {
+          border: false,
+          tab,
+          thickness: sideThickness(piece.core.width, tab, rng)
+        };
+      }
+
+      piece.width = piece.edges.left.thickness + piece.core.width + piece.edges.right.thickness + MARGIN_TOTAL;
+      piece.height = piece.edges.top.thickness + piece.core.height + piece.edges.bottom.thickness + MARGIN_TOTAL;
+      piece.core.x = piece.edges.left.thickness + MARGIN;
+      piece.core.y = piece.edges.top.thickness + MARGIN;
+      piece.isEdge = topBorder || leftBorder || rightBorder || bottomBorder;
+    }
+  }
+
+  for (let row = 0; row < choice.rows; row += 1) {
+    for (let col = 0; col < choice.cols; col += 1) {
+      const piece = matrix[row][col];
+      const neighbors = [];
+      if (col > 0) neighbors.push(matrix[row][col - 1]);
+      if (col < choice.cols - 1) neighbors.push(matrix[row][col + 1]);
+      if (row > 0) neighbors.push(matrix[row - 1][col]);
+      if (row < choice.rows - 1) neighbors.push(matrix[row + 1][col]);
+      piece.neighbors = neighbors;
+    }
+  }
+
+  return pieces;
+}
+
+function getScatterSequence(specs) {
+  const remaining = specs.slice().sort((left, right) => left.sortOrder - right.sortOrder);
+  const sequence = [];
+  let previous = null;
+  let retries = 0;
+
+  while (remaining.length) {
+    const candidate = remaining.pop();
+    if (previous && candidate.neighbors.includes(previous) && retries !== 5) {
+      remaining.unshift(candidate);
+      retries += 1;
+      continue;
+    }
+    sequence.push(candidate);
+    previous = candidate;
+    retries = 0;
+  }
+
+  return sequence;
+}
+
+function buildSubjectRect(subject) {
+  return {
+    x: (state.canvasW - subject.width) / 2,
+    y: (state.canvasH - subject.height) / 2,
+    width: subject.width,
+    height: subject.height
+  };
+}
+
+function pointHitsSubject(x, y, padding, subjectRect) {
+  return (
+    x >= subjectRect.x - padding.x &&
+    x < subjectRect.x + subjectRect.width + padding.x &&
+    y >= subjectRect.y - padding.y &&
+    y < subjectRect.y + subjectRect.height + padding.y
+  );
+}
+
+function scatterPieces(specs, subject, seed) {
+  const sequence = getScatterSequence(specs);
+  let p = 0;
+  let g = 0;
+
+  for (const piece of specs) {
+    p += piece.width - MARGIN_TOTAL;
+    g += piece.height - MARGIN_TOTAL;
+  }
+
+  p = (p * 1.05) / specs.length;
+  g = (g * 1.05) / specs.length;
+
+  const quarterP = p / 4;
+  const quarterG = g / 4;
+  const safeOffsetX = 0;
+  const scatterColsFloat = (state.canvasW - safeOffsetX) / p;
+  const scatterRowsFloat = state.canvasH / g;
+  const roundCols = scatterColsFloat - Math.floor(scatterColsFloat) >= 0.5 ? 1 : 0;
+  const roundRows = scatterRowsFloat - Math.floor(scatterRowsFloat) >= 0.5 ? 1 : 0;
+  const scatterCols = Math.max(1, Math.floor(scatterColsFloat) + roundCols);
+  const scatterRows = Math.max(1, Math.floor(scatterRowsFloat) + roundRows);
+  const cellW = p * (scatterColsFloat / scatterCols);
+  const cellH = g * (scatterRowsFloat / scatterRows);
+  const halfBlockedStepX = cellW / 2;
+  const halfBlockedStepY = cellH / 2;
+  const subjectRect = buildSubjectRect(subject);
+  let currentX = safeOffsetX + p / 2;
+  let currentY = g / 2;
+  let rightLimit = state.canvasW;
+  let bottomLimit = state.canvasH;
+  let leftLimit = safeOffsetX;
+  let topLimit = cellH;
+  let direction = 3;
+  let limitVertical = 999;
+  let limitHorizontal = 999;
+  const gapX = state.canvasW - subject.width;
+  const gapY = state.canvasH - subject.height;
+
+  if (gapX < gapY) {
+    limitHorizontal = Math.floor(gapX / cellW);
+  } else {
+    limitVertical = Math.floor(gapY / cellH);
+  }
+
+  const random = mulberry32(seed);
+  const placed = [];
+  const queue = sequence.slice();
+  const path = [];
+  const total = queue.length;
+  let placedCount = 0;
+  let guard = 0;
+  const guardLimit = Math.max(200, total * 80);
+
+  while (queue.length > 0 && guard < guardLimit) {
+    guard += 1;
+    const piece = queue.pop();
+    const pieceW = piece.width;
+    const pieceH = piece.height;
+    const padding = {
+      x: pieceW / 4,
+      y: pieceH / 4
+    };
+    const blocked = pointHitsSubject(currentX, currentY, padding, subjectRect);
+    const canPlace = !blocked && (
+      ((direction === 3 || direction === 2) && limitVertical > 0) ||
+      ((direction === 0 || direction === 1) && limitHorizontal > 0)
+    );
+
+    path.push({
+      x: currentX,
+      y: currentY,
+      direction,
+      blocked,
+      placed: canPlace
+    });
+
+    if (canPlace) {
+      const jitterX = (random() >= 0.5 ? 1 : -1) * random() * p * 0.0625;
+      const jitterY = (random() >= 0.5 ? 1 : -1) * random() * g * 0.0625;
+      piece.x = currentX + jitterX;
+      piece.y = currentY + jitterY;
+      piece.homeX = piece.x;
+      piece.homeY = piece.y;
+      placed.push(piece);
+      placedCount += 1;
+    } else {
+      queue.push(piece);
+    }
+
+    const stepX = blocked ? halfBlockedStepX : cellW;
+    const stepY = blocked ? halfBlockedStepY : cellH;
+    let nextX;
+    let nextY;
+
+    switch (direction) {
+      case 3:
+        nextX = currentX + stepX;
+        if (nextX > rightLimit - quarterP) {
+          direction = 1;
+          limitVertical -= 1;
+          currentX = rightLimit - p / 2;
+          if (canPlace) {
+            currentY += stepY;
+          }
+          if (limitHorizontal > 0) {
+            rightLimit -= cellW;
+          }
+        } else {
+          currentX = nextX;
+        }
+        break;
+
+      case 1:
+        nextY = currentY + stepY;
+        if (nextY > bottomLimit - quarterG) {
+          direction = 2;
+          limitHorizontal -= 1;
+          currentY = bottomLimit - g / 2;
+          if (canPlace) {
+            currentX -= stepX;
+          }
+          if (limitVertical > 0) {
+            bottomLimit -= cellH;
+          }
+        } else {
+          currentY = nextY;
+        }
+        break;
+
+      case 2:
+        nextX = currentX - stepX;
+        if (nextX < leftLimit + quarterP) {
+          direction = 0;
+          limitVertical -= 1;
+          currentX = leftLimit + p / 2;
+          if (canPlace) {
+            currentY -= stepY;
+          }
+          if (limitHorizontal > 0) {
+            leftLimit += cellW;
+          }
+        } else {
+          currentX = nextX;
+        }
+        break;
+
+      default:
+        nextY = currentY - stepY;
+        if (nextY < topLimit + quarterG) {
+          direction = 3;
+          limitHorizontal -= 1;
+          currentY = topLimit + g / 2;
+          if (canPlace) {
+            currentX += stepX;
+          }
+          if (limitVertical > 0) {
+            topLimit += cellH;
+          }
+        } else {
+          currentY = nextY;
+        }
+        break;
+    }
+  }
+
+  for (const piece of placed) {
+    const halfW = piece.width / 2;
+    const halfH = piece.height / 2;
+    piece.x = clamp(piece.x, halfW, state.canvasW - halfW);
+    piece.y = clamp(piece.y, halfH, state.canvasH - halfH);
+  }
+
+  return {
+    pieces: placed,
+    path,
+    subjectRect,
+    grid: {
+      cols: scatterCols,
+      rows: scatterRows,
+      cellW,
+      cellH,
+      count: scatterCols * scatterRows
+    },
+    metrics: {
+      p,
+      g
+    },
+    placedCount,
+    total,
+    iterations: guard,
+    complete: placedCount === total
+  };
+}
+
+function evaluateChoices() {
+  if (!state.sourceImage) {
+    state.subject = null;
+    state.choices = [];
+    state.selectedChoice = null;
+    return;
+  }
+
+  state.subject = scaleSubject(
+    state.sourceImage.naturalWidth,
+    state.sourceImage.naturalHeight,
+    state.canvasW,
+    state.canvasH
+  );
+
+  const choices = cutChoices(state.subject, 0, defaultChoiceNop());
+  state.choices = choices;
+
+  if (!choices.length) {
+    state.selectedChoice = null;
+    return;
+  }
+
+  const previousNop = state.selectedChoice ? state.selectedChoice.nop : null;
+  let selected = previousNop ? choices.find((choice) => choice.nop === previousNop) : null;
+  if (!selected) {
+    selected = choices.find((choice) => choice.selected) || choices[0];
+  }
+  state.selectedChoice = selected;
+}
+
+function renderChoiceButtons() {
+  const container = $("choice-grid");
+  container.innerHTML = "";
+
+  if (!state.sourceImage) {
+    const hint = document.createElement("div");
+    hint.className = "choice-empty";
+    hint.textContent = "上传图片后会在这里生成可选碎片数量。";
+    container.appendChild(hint);
+    return;
+  }
+
+  if (!state.choices.length) {
+    const hint = document.createElement("div");
+    hint.className = "choice-empty";
+    hint.textContent = "当前画布与主体尺寸没有生成有效的碎片切法。";
+    container.appendChild(hint);
+    return;
+  }
+
+  for (const choice of state.choices) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "choice-btn";
+    if (state.selectedChoice && choice.nop === state.selectedChoice.nop) {
+      button.classList.add("selected");
+    }
+    button.innerHTML = `<span class="nop">${choice.nop}</span><span class="shape">${choice.rows}×${choice.cols}</span>`;
+    button.addEventListener("click", () => {
+      state.selectedChoice = choice;
+      renderChoiceButtons();
+      runLayout("choice");
+    });
+    container.appendChild(button);
+  }
+}
+
+function stageSeed() {
+  const source = state.sourceImage;
+  const imageKey = source ? `${source.naturalWidth}x${source.naturalHeight}` : "none";
+  const choiceKey = state.selectedChoice ? `${state.selectedChoice.nop}:${state.selectedChoice.rows}x${state.selectedChoice.cols}` : "none";
+  return hashString(`${imageKey}:${state.canvasW}x${state.canvasH}:${choiceKey}:${state.relayoutNonce}`);
+}
+
+function runLayout(trigger) {
+  if (!state.sourceImage || !state.selectedChoice || !state.subject) {
+    state.layout = null;
+    updateStats();
+    drawCanvas();
+    return;
+  }
+
+  const seed = stageSeed();
+  const specs = buildPieceSpecs(state.subject, state.selectedChoice, seed);
+  const layout = scatterPieces(specs, state.subject, seed ^ 0x9e3779b9);
+  state.layout = {
+    ...layout,
+    trigger,
+    specs
+  };
+
+  updateStats();
+  drawCanvas();
+
+  logLine(`subject  : ${formatSize(state.subject.width, state.subject.height)} (scale=${state.subject.scale.toFixed(2)})`, "info");
+  logLine(`cut      : ${state.selectedChoice.nop} pieces, rows=${state.selectedChoice.rows}, cols=${state.selectedChoice.cols}, size=${state.selectedChoice.size}`, "info");
+  logLine(`scatter  : p=${layout.metrics.p.toFixed(1)}, g=${layout.metrics.g.toFixed(1)}, S=${layout.grid.cellW.toFixed(1)}, C=${layout.grid.cellH.toFixed(1)}`, "info");
+  if (layout.complete) {
+    logLine(`placed   : ${layout.placedCount}/${layout.total} pieces in ${layout.iterations} iterations`, "ok");
+  } else {
+    logLine(`placed   : ${layout.placedCount}/${layout.total} pieces, scatter ended before full placement`, "warn");
+  }
+  logLine("".padEnd(68, "·"), "info");
+}
+
+function updateStats() {
+  $("stat-canvas").textContent = formatSize(state.canvasW, state.canvasH);
+  $("stat-source").textContent = state.sourceImage
+    ? formatSize(state.sourceImage.naturalWidth, state.sourceImage.naturalHeight)
+    : "-";
+  $("stat-subject").textContent = state.subject ? formatSize(state.subject.width, state.subject.height) : "-";
+  $("stat-pieces").textContent = state.selectedChoice ? `${state.selectedChoice.nop}` : "-";
+  $("stat-cut-grid").textContent = state.selectedChoice ? `${state.selectedChoice.rows}×${state.selectedChoice.cols}` : "-";
+  $("stat-spiral-grid").textContent = state.layout ? `${state.layout.grid.cols}×${state.layout.grid.rows}` : "-";
+  $("stat-grid-count").textContent = state.layout ? `${state.layout.grid.count}` : "-";
+  $("stat-pg").textContent = state.layout
+    ? `${Math.round(state.layout.metrics.p)}×${Math.round(state.layout.metrics.g)}`
+    : "-";
+  $("stat-sc").textContent = state.layout
+    ? `${Math.round(state.layout.grid.cellW)}×${Math.round(state.layout.grid.cellH)}`
+    : "-";
+  $("stat-placed").textContent = state.layout ? `${state.layout.placedCount}/${state.layout.total}` : "-";
+
+  if (!state.sourceImage) {
+    $("stage-caption").textContent = "等待上传图片。";
+  } else if (!state.layout) {
+    $("stage-caption").textContent = "图片已加载，等待选择碎片数量。";
+  } else {
+    $("stage-caption").textContent =
+      `当前使用 ${state.layout.total} 块碎片，切割 ${state.selectedChoice.rows}×${state.selectedChoice.cols}，散布网格 ${state.layout.grid.cols}×${state.layout.grid.rows}。`;
+  }
+}
+
+function resizeCanvas(canvas, width, height) {
+  canvas.width = Math.round(width * DPR);
+  canvas.height = Math.round(height * DPR);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  const context = canvas.getContext("2d");
+  context.setTransform(DPR, 0, 0, DPR, 0, 0);
+  return context;
+}
+
+function drawBackground(context) {
+  context.clearRect(0, 0, state.canvasW, state.canvasH);
+
+  const background = context.createLinearGradient(0, 0, 0, state.canvasH);
+  background.addColorStop(0, "#f7f0e4");
+  background.addColorStop(1, "#ece0c9");
+  context.fillStyle = background;
+  context.fillRect(0, 0, state.canvasW, state.canvasH);
+
+  context.save();
+  context.globalAlpha = 0.08;
+  for (let x = -state.canvasH; x < state.canvasW + state.canvasH; x += 28) {
+    context.beginPath();
+    context.moveTo(x, 0);
+    context.lineTo(x + state.canvasH, state.canvasH);
+    context.strokeStyle = "#705e41";
+    context.lineWidth = 1;
+    context.stroke();
+  }
+  context.restore();
+
+  context.save();
+  context.strokeStyle = "rgba(31, 42, 50, 0.12)";
+  context.lineWidth = 2;
+  context.strokeRect(0, 0, state.canvasW, state.canvasH);
+  context.restore();
+}
+
+function drawScatterGrid(context, grid) {
+  if (!grid) {
+    return;
+  }
+
+  context.save();
+  context.setLineDash([7, 7]);
+  context.strokeStyle = "rgba(13, 90, 106, 0.2)";
+  context.lineWidth = 1;
+
+  for (let col = 0; col <= grid.cols; col += 1) {
+    const x = Math.round(col * grid.cellW) + 0.5;
+    context.beginPath();
+    context.moveTo(x, 0);
+    context.lineTo(x, state.canvasH);
+    context.stroke();
+  }
+
+  for (let row = 0; row <= grid.rows; row += 1) {
+    const y = Math.round(row * grid.cellH) + 0.5;
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(state.canvasW, y);
+    context.stroke();
+  }
+
+  context.restore();
+}
+
+function drawSubject(context, subjectRect) {
+  if (!state.sourceImage || !state.subject || !subjectRect) {
+    return;
+  }
+
+  context.save();
+  context.shadowColor = "rgba(17, 117, 138, 0.16)";
+  context.shadowBlur = 18;
+  context.drawImage(state.sourceImage, subjectRect.x, subjectRect.y, subjectRect.width, subjectRect.height);
+  context.restore();
+
+  const overlay = context.createLinearGradient(subjectRect.x, subjectRect.y, subjectRect.x, subjectRect.y + subjectRect.height);
+  overlay.addColorStop(0, "rgba(17, 117, 138, 0.18)");
+  overlay.addColorStop(1, "rgba(17, 117, 138, 0.08)");
+  context.fillStyle = overlay;
+  context.fillRect(subjectRect.x, subjectRect.y, subjectRect.width, subjectRect.height);
+
+  context.save();
+  context.setLineDash([10, 6]);
+  context.strokeStyle = "rgba(13, 90, 106, 0.42)";
+  context.lineWidth = 2;
+  context.strokeRect(subjectRect.x, subjectRect.y, subjectRect.width, subjectRect.height);
+  context.restore();
+
+  context.save();
+  context.fillStyle = "rgba(13, 90, 106, 0.88)";
+  context.font = `600 13px ${getComputedStyle(document.documentElement).getPropertyValue("--mono-font")}`;
+  context.textAlign = "center";
+  context.fillText(
+    `Subject ${Math.round(subjectRect.width)}×${Math.round(subjectRect.height)}`,
+    subjectRect.x + subjectRect.width / 2,
+    subjectRect.y - 10
+  );
+  context.restore();
+}
+
+function drawArrowHead(context, fromX, fromY, toX, toY, color) {
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const length = Math.hypot(dx, dy);
+  if (length < 18) {
+    return;
+  }
+  const angle = Math.atan2(dy, dx);
+  const size = 7;
+  context.save();
+  context.translate(toX, toY);
+  context.rotate(angle);
+  context.beginPath();
+  context.moveTo(0, 0);
+  context.lineTo(-size * 1.6, size * 0.8);
+  context.lineTo(-size * 1.4, -size * 0.8);
+  context.closePath();
+  context.fillStyle = color;
+  context.fill();
+  context.restore();
+}
+
+function drawSpiralPath(context, path) {
+  if (!path || path.length < 2) {
+    return;
+  }
+
+  const stroke = "rgba(193, 116, 44, 0.72)";
+  context.save();
+  context.setLineDash([12, 8]);
+  context.strokeStyle = stroke;
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(path[0].x, path[0].y);
+  for (let index = 1; index < path.length; index += 1) {
+    context.lineTo(path[index].x, path[index].y);
+  }
+  context.stroke();
+  context.restore();
+
+  context.save();
+  for (let index = 1; index < path.length; index += 1) {
+    const previous = path[index - 1];
+    const current = path[index];
+    drawArrowHead(context, previous.x, previous.y, current.x, current.y, stroke);
+  }
+  context.restore();
+
+  context.save();
+  for (const point of path) {
+    context.beginPath();
+    context.arc(point.x, point.y, point.placed ? 3.2 : 2.6, 0, Math.PI * 2);
+    context.fillStyle = point.blocked
+      ? "rgba(183, 90, 46, 0.8)"
+      : point.placed
+        ? "rgba(47, 125, 90, 0.82)"
+        : "rgba(31, 42, 50, 0.28)";
+    context.fill();
+  }
+  context.restore();
+}
+
+function drawPieces(context, pieces) {
+  if (!pieces || !pieces.length || !state.sourceImage || !state.subject) {
+    return;
+  }
+
+  const fontMono = getComputedStyle(document.documentElement).getPropertyValue("--mono-font");
+  const scale = state.subject.scale;
+
+  for (const piece of pieces) {
+    const outerX = piece.x - piece.width / 2;
+    const outerY = piece.y - piece.height / 2;
+    const hue = piece.colorHue;
+    const fill = `hsla(${hue}, 58%, 52%, 0.16)`;
+    const stroke = `hsla(${hue}, 48%, 36%, 0.7)`;
+    const innerX = outerX + piece.core.x;
+    const innerY = outerY + piece.core.y;
+
+    context.save();
+    context.beginPath();
+    if (context.roundRect) {
+      context.roundRect(outerX, outerY, piece.width, piece.height, 14);
+    } else {
+      context.rect(outerX, outerY, piece.width, piece.height);
+    }
+    context.fillStyle = fill;
+    context.strokeStyle = stroke;
+    context.lineWidth = 1.5;
+    context.shadowColor = "rgba(31, 42, 50, 0.12)";
+    context.shadowBlur = 14;
+    context.fill();
+    context.stroke();
+    context.restore();
+
+    context.save();
+    context.beginPath();
+    if (context.roundRect) {
+      context.roundRect(innerX, innerY, piece.core.width, piece.core.height, 10);
+    } else {
+      context.rect(innerX, innerY, piece.core.width, piece.core.height);
+    }
+    context.clip();
+    context.drawImage(
+      state.sourceImage,
+      piece.imgX / scale,
+      piece.imgY / scale,
+      piece.core.width / scale,
+      piece.core.height / scale,
+      innerX,
+      innerY,
+      piece.core.width,
+      piece.core.height
+    );
+    context.fillStyle = `hsla(${hue}, 62%, 50%, 0.16)`;
+    context.fillRect(innerX, innerY, piece.core.width, piece.core.height);
+    context.restore();
+
+    context.save();
+    context.setLineDash([4, 4]);
+    context.strokeStyle = "rgba(255, 255, 255, 0.45)";
+    context.lineWidth = 1;
+    context.strokeRect(innerX, innerY, piece.core.width, piece.core.height);
+    context.restore();
+
+    context.save();
+    context.fillStyle = "rgba(31, 42, 50, 0.86)";
+    context.font = `700 ${Math.max(11, Math.min(16, piece.width / 6))}px ${fontMono}`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(String(piece.id), piece.x, piece.y);
+    context.restore();
+  }
+}
+
+function drawPlaceholder(context) {
+  context.save();
+  context.textAlign = "center";
+  context.fillStyle = "rgba(31, 42, 50, 0.78)";
+  context.font = `700 28px ${getComputedStyle(document.documentElement).getPropertyValue("--display-font")}`;
+  context.fillText("Upload an image to begin", state.canvasW / 2, state.canvasH / 2 - 18);
+  context.fillStyle = "rgba(115, 104, 91, 0.92)";
+  context.font = `600 14px ${getComputedStyle(document.documentElement).getPropertyValue("--mono-font")}`;
+  context.fillText("The canvas will show cut choices, scatter grid, subject bounds and spiral arrows.", state.canvasW / 2, state.canvasH / 2 + 14);
+  context.restore();
+}
+
+function drawCanvas() {
+  const canvas = $("layout-canvas");
+  const context = resizeCanvas(canvas, state.canvasW, state.canvasH);
+  drawBackground(context);
+
+  if (!state.layout) {
+    drawPlaceholder(context);
+    return;
+  }
+
+  drawScatterGrid(context, state.layout.grid);
+  drawSubject(context, state.layout.subjectRect);
+  drawSpiralPath(context, state.layout.path);
+  drawPieces(context, state.layout.pieces);
+
+  context.save();
+  context.fillStyle = "rgba(31, 42, 50, 0.42)";
+  context.font = `600 12px ${getComputedStyle(document.documentElement).getPropertyValue("--mono-font")}`;
+  context.textAlign = "right";
+  context.fillText(`${state.layout.total} pieces`, state.canvasW - 16, state.canvasH - 14);
+  context.restore();
+}
+
+function refreshPreviewInfo() {
+  const frame = $("preview-frame");
+  const image = $("preview-image");
+  const name = $("preview-name");
+  const size = $("preview-size");
+  const uploadBox = $("upload-box");
+
+  if (!state.sourceImage) {
+    frame.classList.remove("visible");
+    uploadBox.classList.remove("has-image");
+    name.textContent = "未选择文件";
+    size.textContent = "请先上传图片";
+    return;
+  }
+
+  frame.classList.add("visible");
+  uploadBox.classList.add("has-image");
+  image.src = state.sourceUrl;
+  name.textContent = state.sourceName || "已加载图片";
+  size.textContent = `${state.sourceImage.naturalWidth}×${state.sourceImage.naturalHeight}`;
+}
+
+function recomputeFromState(trigger) {
+  clearLog();
+  evaluateChoices();
+  renderChoiceButtons();
+  updateStats();
+  drawCanvas();
+
+  if (!state.sourceImage) {
+    logLine("等待上传图片。", "info");
+    return;
+  }
+
+  logLine(`source   : ${state.sourceName || "uploaded image"} (${state.sourceImage.naturalWidth}×${state.sourceImage.naturalHeight})`, "info");
+  logLine(`canvas   : ${state.canvasW}×${state.canvasH}`, "info");
+  logLine(`choices  : ${state.choices.length ? state.choices.map((choice) => choice.nop).join(", ") : "none"}`, "info");
+
+  if (!state.selectedChoice) {
+    logLine("当前没有可用的碎片切法。", "warn");
+    return;
+  }
+
+  runLayout(trigger);
+}
+
+function handleFile(file) {
+  if (!file) {
+    return;
+  }
+
+  if (state.sourceUrl) {
+    URL.revokeObjectURL(state.sourceUrl);
+    state.sourceUrl = "";
+  }
+
+  const image = new Image();
+  const objectUrl = URL.createObjectURL(file);
+  image.onload = () => {
+    state.sourceImage = image;
+    state.sourceUrl = objectUrl;
+    state.sourceName = file.name;
+    state.relayoutNonce = 0;
+    refreshPreviewInfo();
+    recomputeFromState("upload");
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(objectUrl);
+    logLine("图片加载失败，请换一张再试。", "warn");
+  };
+  image.src = objectUrl;
+}
+
+function bindEvents() {
+  $("file-input").addEventListener("change", (event) => {
+    handleFile(event.target.files[0]);
+  });
+
+  $("canvas-width").addEventListener("input", (event) => {
+    state.canvasW = Number(event.target.value);
+    setSliderValues();
+    recomputeFromState("resize");
+  });
+
+  $("canvas-height").addEventListener("input", (event) => {
+    state.canvasH = Number(event.target.value);
+    setSliderValues();
+    recomputeFromState("resize");
+  });
+
+  $("rerun-button").addEventListener("click", () => {
+    state.relayoutNonce += 1;
+    recomputeFromState("rerun");
+  });
+
+  $("reset-button").addEventListener("click", () => {
+    state.canvasW = 1200;
+    state.canvasH = 720;
+    state.relayoutNonce += 1;
+    setSliderValues();
+    recomputeFromState("reset");
+  });
+}
+
+function init() {
+  setSliderValues();
+  refreshPreviewInfo();
+  updateStats();
+  drawCanvas();
+  logLine("上传图片后开始计算 cutChoices、主体缩放和螺旋散布。", "info");
+  bindEvents();
+}
+
+init();
+</script>
+</body>
+</html>

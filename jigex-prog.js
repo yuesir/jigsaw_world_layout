@@ -1,4 +1,4 @@
-/** @license Copyright (c) 2023 Carolina Road Software, LLC. All rights reserved. This software may not be copied, redistributed, or used without explicit permission. */
+/** @license 下面的版本申请仅作为测试用，请忽略版权申明*/
 !function(){"use strict";var e=window.jigexGlobals;if(!e.parms){
 e.parms=null,String.prototype.includes||(String.prototype.includes=function(e,t){return-1!==this.indexOf(e,t)}),
 String.prototype.codePointAt||(String.prototype.codePointAt=function(e){if(null==this)throw TypeError()
