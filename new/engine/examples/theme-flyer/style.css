@@ -1,0 +1,127 @@
+:root {
+  --jigsaw-bg: #7592ac;
+  --jigsaw-panel: #5a86ac;
+  --jigsaw-highlight: #6c93b6;
+  --jigsaw-border: #3b5a75;
+  --ink: #1a1a1a;
+  --ink-soft: #555;
+  font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--jigsaw-bg);
+  color: var(--ink);
+  transition: background 200ms ease;
+}
+
+#app {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+header {
+  margin-bottom: 24px;
+}
+
+header h1 {
+  font-size: 28px;
+  margin: 0 0 4px;
+}
+
+header p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.theme-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--jigsaw-panel);
+  border: 1px solid var(--jigsaw-border);
+  border-radius: 8px;
+}
+
+.theme-picker button {
+  border: 1px solid var(--jigsaw-border);
+  background: var(--jigsaw-highlight);
+  color: var(--ink);
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+
+.theme-picker button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.theme-picker button.active {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.stage {
+  background: var(--jigsaw-bg);
+  border: 1px solid var(--jigsaw-border);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 16px;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.controls button {
+  background: var(--jigsaw-highlight);
+  border: 1px solid var(--jigsaw-border);
+  color: var(--ink);
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.controls button:hover {
+  filter: brightness(1.05);
+}
+
+.fps {
+  margin-left: auto;
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.status {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--jigsaw-panel);
+  border: 1px solid var(--jigsaw-border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ink);
+  min-height: 40px;
+}

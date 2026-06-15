@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>拼图开发 · 第1阶段模板</title>
+  <style>
+    :root {
+      --bg: #1e2430;
+      --panel: #2c3546;
+      --text: #ecf2ff;
+      --accent: #60a5fa;
+      --muted: #9fb0c9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", Roboto, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .wrap {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 10px;
+      background: var(--panel);
+      border-bottom: 1px solid #3c4a62;
+      flex-wrap: wrap;
+    }
+    .toolbar label { color: var(--muted); font-size: 14px; }
+    .toolbar input {
+      width: min(560px, 90vw);
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #526487;
+      outline: none;
+      background: #1f2633;
+      color: var(--text);
+    }
+    .toolbar button {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #0b1220;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .toolbar .hint { color: var(--muted); font-size: 13px; }
+    .stage {
+      position: relative;
+      overflow: hidden;
+    }
+    #gameCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .status {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      background: rgba(10, 14, 22, 0.65);
+      border: 1px solid #3f4d66;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-line;
+      color: #dbe7ff;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="toolbar">
+      <label for="imageUrl">题图 URL</label>
+      <input id="imageUrl" type="url" placeholder="https://.../photo.jpg" />
+      <button id="loadBtn">加载题图</button>
+      <button id="fitBtn" title="切换 contain / cover">切换适配模式</button>
+      <span class="hint">第1阶段目标：稳定画布 + 加载图片 + 居中缩放渲染</span>
+    </div>
+    <div class="stage" id="stage">
+      <canvas id="gameCanvas"></canvas>
+      <div class="status" id="status"></div>
+    </div>
+  </div>
+
+  <script src="./stage1_template.js"></script>
+</body>
+</html>

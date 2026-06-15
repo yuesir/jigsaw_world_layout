@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jig Minimax · 单文件拼图游戏</title>
+<style>
+:root{
+  --bg1:#8ea4bb;
+  --bg2:#6e879f;
+  --ink:#203140;
+  --muted:#5d6e7d;
+  --line:rgba(20,45,67,.14);
+  --accent:#0f6b84;
+  --accent2:#0b8cad;
+  --panel:rgba(249,251,252,.92);
+  --card:rgba(255,255,255,.76);
+  --shadow:0 20px 40px rgba(14,27,39,.2);
+  --mono:"Cascadia Mono","Consolas",monospace;
+  --display:"Baskerville Old Face","Palatino Linotype",serif;
+  --body:"Segoe UI","Trebuchet MS",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{
+  font-family:var(--body);
+  color:var(--ink);
+  background:
+    radial-gradient(circle at top left,rgba(255,255,255,.42),transparent 25%),
+    radial-gradient(circle at bottom right,rgba(15,107,132,.18),transparent 20%),
+    linear-gradient(180deg,var(--bg1),var(--bg2));
+}
+.app{width:min(1500px,calc(100vw - 20px));margin:10px auto 18px}
+.toolbar,.status,.panel-card{
+  background:linear-gradient(180deg,rgba(250,251,252,.96),rgba(237,242,245,.92));
+  border:1px solid rgba(255,255,255,.34);
+  box-shadow:var(--shadow);
+}
+.toolbar{
+  display:flex;
+  justify-content:space-between;
+  gap:14px;
+  align-items:center;
+  padding:14px 16px;
+  border-radius:24px;
+}
+.brand small{
+  display:block;
+  font:700 11px/1 var(--mono);
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--accent);
+}
+.brand h1{
+  margin:4px 0 0;
+  font:700 clamp(24px,3vw,38px)/.95 var(--display);
+  letter-spacing:.04em;
+}
+.brand p{
+  margin:8px 0 0;
+  font-size:13px;
+  color:var(--muted);
+}
+.tools{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  justify-content:flex-end;
+}
+button{
+  appearance:none;
+  border:1px solid transparent;
+  border-radius:999px;
+  padding:11px 14px;
+  cursor:pointer;
+  font:700 11px/1 var(--mono);
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  transition:transform .18s ease,background .18s ease,border-color .18s ease,opacity .18s ease;
+}
+button:hover{transform:translateY(-1px)}
+button:disabled{opacity:.42;cursor:not-allowed;transform:none}
+.tool{
+  background:rgba(255,255,255,.76);
+  border-color:rgba(20,45,67,.1);
+  color:var(--ink);
+}
+.tool.active,.primary{
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border-color:rgba(15,107,132,.2);
+  color:#eef8fb;
+}
+.board-wrap{margin-top:12px}
+.board{
+  position:relative;
+  overflow:hidden;
+  border-radius:28px;
+  border:1px solid rgba(255,255,255,.25);
+  box-shadow:var(--shadow);
+  background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.05));
+}
+#game{
+  display:block;
+  width:100%;
+  aspect-ratio:1400/820;
+  touch-action:none;
+}
+.preview{
+  position:absolute;
+  left:18px;
+  top:18px;
+  width:220px;
+  padding:10px;
+  border-radius:18px;
+  background:rgba(250,251,252,.94);
+  border:1px solid rgba(20,45,67,.1);
+  box-shadow:0 10px 22px rgba(20,45,67,.14);
+}
+.preview.hidden{display:none}
+.preview .cap{
+  font:700 11px/1 var(--mono);
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin-bottom:8px;
+}
+.preview img{
+  display:block;
+  width:100%;
+  aspect-ratio:1.45/1;
+  object-fit:cover;
+  border-radius:12px;
+  border:1px solid rgba(20,45,67,.08);
+}
+.preview .meta{
+  margin-top:8px;
+  font-size:12px;
+  color:var(--muted);
+  line-height:1.5;
+}
+.banner{
+  position:absolute;
+  right:18px;
+  bottom:18px;
+  max-width:min(460px,calc(100% - 36px));
+  padding:12px 14px;
+  border-radius:16px;
+  background:rgba(17,32,47,.74);
+  color:#eef8fb;
+  font-size:13px;
+  line-height:1.55;
+  opacity:0;
+  transform:translateY(10px);
+  transition:.2s ease;
+}
+.banner.show{opacity:1;transform:translateY(0)}
+.status{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:12px;
+  padding:12px 14px;
+  border-radius:22px;
+}
+.pill{
+  padding:10px 12px;
+  border-radius:999px;
+  background:rgba(255,255,255,.78);
+  border:1px solid var(--line);
+  font-size:13px;
+}
+.pill b{font-family:var(--mono)}
+.help{
+  margin-top:10px;
+  padding:0 6px;
+  font-size:13px;
+  color:#eef8fb;
+}
+.panel{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+  background:rgba(10,23,34,.46);
+  backdrop-filter:blur(10px);
+}
+.panel.hidden{display:none}
+.panel-card{
+  width:min(1080px,100%);
+  padding:22px;
+  border-radius:28px;
+}
+.panel-grid{
+  display:grid;
+  grid-template-columns:360px 1fr;
+  gap:18px;
+  align-items:start;
+}
+.picker,.card{
+  padding:14px;
+  border-radius:20px;
+  background:rgba(255,255,255,.62);
+  border:1px solid var(--line);
+}
+.picker h2,.settings h3{margin:0 0 12px}
+.picker p,.settings p{
+  margin:0 0 12px;
+  font-size:14px;
+  line-height:1.7;
+  color:var(--muted);
+}
+.picker img{
+  display:block;
+  width:100%;
+  aspect-ratio:1.5/1;
+  object-fit:cover;
+  border-radius:16px;
+  border:1px solid var(--line);
+}
+.picker .meta{margin-top:10px;font-size:13px;color:var(--muted)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.settings{display:grid;gap:14px}
+.choices,.theme-grid{display:flex;flex-wrap:wrap;gap:8px}
+.choice,.theme-chip{
+  min-width:78px;
+  background:rgba(255,255,255,.82);
+  border-color:var(--line);
+  color:var(--ink);
+}
+.choice.selected,.theme-chip.selected{
+  background:linear-gradient(180deg,rgba(15,107,132,.12),rgba(15,107,132,.2));
+  border-color:rgba(15,107,132,.32);
+}
+.choice span{display:block}
+.choice .n{font:700 18px/1 var(--mono)}
+.choice .g{margin-top:5px;font:600 11px/1 var(--mono);color:var(--muted)}
+.theme-chip{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 12px;
+  min-width:126px;
+}
+.theme-swatch{
+  width:16px;
+  height:16px;
+  border-radius:999px;
+  border:1px solid rgba(20,45,67,.16);
+}
+.toggle{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  padding:10px 0;
+}
+.toggle input{accent-color:var(--accent);margin-top:2px}
+.summary{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+}
+.tile{
+  padding:12px;
+  border-radius:16px;
+  background:rgba(255,255,255,.78);
+  border:1px solid var(--line);
+}
+.tile small{
+  display:block;
+  margin-bottom:8px;
+  font:700 10px/1 var(--mono);
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+.tile b{font:700 17px/1.1 var(--mono)}
+@media (max-width:980px){
+  .panel-grid{grid-template-columns:1fr}
+  .toolbar{flex-direction:column;align-items:flex-start}
+  .tools{justify-content:flex-start}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="toolbar">
+    <div class="brand">
+      <small>Jig Minimax</small>
+      <h1>单文件拼图游戏网页</h1>
+      <p>按前面拆分的核心模板重建：资源选择、主题、切块、拖拽吸附、旋转、边缘模式、暂停计时与本地存档。</p>
+    </div>
+    <div class="tools">
+      <button class="tool" id="openBtn">打开图片</button>
+      <button class="tool" id="piecesBtn">新拼图</button>
+      <button class="tool" id="shuffleBtn" disabled>重开</button>
+      <button class="tool" id="edgesBtn" disabled>边缘模式</button>
+      <button class="tool active" id="rotateBtn" disabled>旋转</button>
+      <button class="tool active" id="previewBtn" disabled>预览</button>
+      <button class="tool" id="pauseBtn" disabled>暂停</button>
+      <button class="tool" id="saveBtn" disabled>存档</button>
+      <button class="tool" id="loadBtn">读档</button>
+      <button class="tool" id="clearSaveBtn">清档</button>
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board">
+      <canvas id="game" width="1400" height="820"></canvas>
+      <div class="preview" id="previewBox">
+        <div class="cap">盒图预览</div>
+        <img id="previewImg" alt="拼图预览">
+        <div class="meta"><strong id="previewTitle">演示图片</strong><br><span id="previewMeta">等待开始</span></div>
+      </div>
+      <div class="banner" id="banner"></div>
+    </div>
+    <div class="status">
+      <div class="pill">块数 <b id="stPieces">-</b></div>
+      <div class="pill">进度 <b id="stProgress">0%</b></div>
+      <div class="pill">移动 <b id="stMoves">0</b></div>
+      <div class="pill">时间 <b id="stTime">00:00</b></div>
+      <div class="pill">状态 <b id="stMode">Idle</b></div>
+      <div class="pill">主题 <b id="stTheme">Blue</b></div>
+      <div class="pill">图片 <b id="stTitle">Demo</b></div>
+    </div>
+    <div class="help">操作提示：拖动拼块移动；双击、滚轮或按 <b>R</b> 旋转；按 <b>E</b> 切换边缘模式；按 <b>Space</b> 暂停或恢复。</div>
+  </div>
+</div>
+
+<div class="panel" id="panel">
+  <div class="panel-card">
+    <div class="panel-grid">
+      <div class="picker">
+        <h2>开始新的拼图</h2>
+        <p id="panelNote">页面会先按画布比例缩放题图，再自动推导若干切块方案。你可以使用演示图片，也可以导入自己的照片。</p>
+        <img id="pickerImg" alt="拼图预览">
+        <div class="meta"><div id="pickerName">Harbor Light (Demo)</div><div id="pickerSize">Loading...</div></div>
+        <div class="actions">
+          <button class="tool" id="demoBtn">使用演示图</button>
+          <button class="primary" id="fileBtn">上传图片</button>
+        </div>
+      </div>
+      <div class="settings">
+        <div class="card">
+          <h3>块数方案</h3>
+          <div class="choices" id="choices"></div>
+        </div>
+        <div class="card">
+          <h3>主题外观</h3>
+          <div class="theme-grid" id="themeChoices"></div>
+        </div>
+        <div class="card">
+          <h3>开始选项</h3>
+          <label class="toggle"><input type="checkbox" id="rotChk" checked><div><strong>启用旋转</strong><div>允许拼块以 0 / 90 / 180 / 270 度角开局，并在游戏中继续旋转。</div></div></label>
+          <label class="toggle"><input type="checkbox" id="boxChk" checked><div><strong>显示盒图预览</strong><div>在左上角显示参考图，方便贴近原版的查看方式。</div></div></label>
+        </div>
+        <div class="card">
+          <h3>当前摘要</h3>
+          <div class="summary">
+            <div class="tile"><small>画布</small><b>1400x820</b></div>
+            <div class="tile"><small>来源</small><b id="sumSource">-</b></div>
+            <div class="tile"><small>题图缩放</small><b id="sumSubject">-</b></div>
+            <div class="tile"><small>默认方案</small><b id="sumChoice">-</b></div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="primary" id="startBtn">开始拼图</button>
+          <button class="tool" id="closeBtn">关闭面板</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input id="fileInput" type="file" accept="image/*" hidden>
+
+<script>
+const W = 1400;
+const H = 820;
+const DPR = window.devicePixelRatio || 1;
+const MARGIN = 10;
+const DEFAULT_NOP = 96;
+const SAVE_KEY = "jig_minimax_save_v1";
+
+const THEMES = {
+  blue: { name: "Blue", label: "蓝灰", bg1: "#8ea4bb", bg2: "#6e879f", accent: "#0f6b84", accent2: "#0b8cad", panel: "#5a86ac" },
+  charcoal: { name: "Charcoal", label: "炭灰", bg1: "#5d6167", bg2: "#35393e", accent: "#6f8ca3", accent2: "#4f6f86", panel: "#464d55" },
+  olive: { name: "Olive", label: "橄榄", bg1: "#8d9480", bg2: "#5f634f", accent: "#60724d", accent2: "#73895b", panel: "#6a7259" },
+  plum: { name: "Plum", label: "紫梅", bg1: "#a699a6", bg2: "#786879", accent: "#7e5f80", accent2: "#96709a", panel: "#8f7791" }
+};
+
+const dom = {
+  game: document.getElementById("game"),
+  openBtn: document.getElementById("openBtn"),
+  piecesBtn: document.getElementById("piecesBtn"),
+  shuffleBtn: document.getElementById("shuffleBtn"),
+  edgesBtn: document.getElementById("edgesBtn"),
+  rotateBtn: document.getElementById("rotateBtn"),
+  previewBtn: document.getElementById("previewBtn"),
+  pauseBtn: document.getElementById("pauseBtn"),
+  saveBtn: document.getElementById("saveBtn"),
+  loadBtn: document.getElementById("loadBtn"),
+  clearSaveBtn: document.getElementById("clearSaveBtn"),
+  panel: document.getElementById("panel"),
+  demoBtn: document.getElementById("demoBtn"),
+  fileBtn: document.getElementById("fileBtn"),
+  fileInput: document.getElementById("fileInput"),
+  startBtn: document.getElementById("startBtn"),
+  closeBtn: document.getElementById("closeBtn"),
+  choices: document.getElementById("choices"),
+  themeChoices: document.getElementById("themeChoices"),
+  rotChk: document.getElementById("rotChk"),
+  boxChk: document.getElementById("boxChk"),
+  pickerImg: document.getElementById("pickerImg"),
+  pickerName: document.getElementById("pickerName"),
+  pickerSize: document.getElementById("pickerSize"),
+  sumSource: document.getElementById("sumSource"),
+  sumSubject: document.getElementById("sumSubject"),
+  sumChoice: document.getElementById("sumChoice"),
+  previewBox: document.getElementById("previewBox"),
+  previewImg: document.getElementById("previewImg"),
+  previewTitle: document.getElementById("previewTitle"),
+  previewMeta: document.getElementById("previewMeta"),
+  banner: document.getElementById("banner"),
+  stPieces: document.getElementById("stPieces"),
+  stProgress: document.getElementById("stProgress"),
+  stMoves: document.getElementById("stMoves"),
+  stTime: document.getElementById("stTime"),
+  stMode: document.getElementById("stMode"),
+  stTheme: document.getElementById("stTheme"),
+  stTitle: document.getElementById("stTitle"),
+  panelNote: document.getElementById("panelNote")
+};
+
+const ctx = dom.game.getContext("2d");
+dom.game.width = W * DPR;
+dom.game.height = H * DPR;
+ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+const app = {
+  src: null,
+  srcUrl: "",
+  sourceDataUrl: "",
+  srcName: "",
+  demo: true,
+  subject: null,
+  choices: [],
+  choice: null,
+  game: null,
+  bannerTimer: null,
+  themeName: "blue"
+};
+
+const Utils = {
+  clamp(v, min, max) { return Math.max(min, Math.min(max, v)); },
+  hash(text) {
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  },
+  rng(seed) {
+    let t = seed >>> 0;
+    return () => {
+      t += 0x6d2b79f5;
+      let r = Math.imul(t ^ (t >>> 15), 1 | t);
+      r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+  },
+  rad(angle) { return angle * Math.PI / 180; },
+  rotate(x, y, angle) {
+    const c = Math.cos(Utils.rad(angle));
+    const s = Math.sin(Utils.rad(angle));
+    return { x: x * c - y * s, y: x * s + y * c };
+  },
+  time(ms) {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return h ? `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  },
+  boardPoint(event) {
+    const rect = dom.game.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) * W / rect.width,
+      y: (event.clientY - rect.top) * H / rect.height
+    };
+  },
+  roundRect(x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  },
+  padRect(rect, px, py = px) {
+    return { x: rect.x - px, y: rect.y - py, w: rect.w + px * 2, h: rect.h + py * 2 };
+  },
+  hitRect(a, b) {
+    return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+  },
+  showBanner(text) {
+    dom.banner.textContent = text;
+    dom.banner.classList.add("show");
+    clearTimeout(app.bannerTimer);
+    app.bannerTimer = setTimeout(() => dom.banner.classList.remove("show"), 2400);
+  },
+  async imageToDataUrl(img, limitW = 1600, limitH = 1200) {
+    const ratio = Math.min(limitW / img.naturalWidth, limitH / img.naturalHeight, 1);
+    const w = Math.max(1, Math.round(img.naturalWidth * ratio));
+    const h = Math.max(1, Math.round(img.naturalHeight * ratio));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", 0.92);
+  }
+};
+
+const ThemeSystem = {
+  apply(name) {
+    const theme = THEMES[name] || THEMES.blue;
+    app.themeName = name in THEMES ? name : "blue";
+    document.documentElement.style.setProperty("--bg1", theme.bg1);
+    document.documentElement.style.setProperty("--bg2", theme.bg2);
+    document.documentElement.style.setProperty("--accent", theme.accent);
+    document.documentElement.style.setProperty("--accent2", theme.accent2);
+    dom.stTheme.textContent = theme.name;
+    this.renderChoices();
+  },
+  renderChoices() {
+    dom.themeChoices.innerHTML = "";
+    Object.entries(THEMES).forEach(([key, theme]) => {
+      const btn = document.createElement("button");
+      btn.className = `theme-chip${app.themeName === key ? " selected" : ""}`;
+      btn.innerHTML = `<span class="theme-swatch" style="background:${theme.bg2}"></span><span>${theme.label}</span>`;
+      btn.addEventListener("click", () => {
+        ThemeSystem.apply(key);
+        if (app.game) {
+          app.game.themeName = key;
+          app.game.updateUi();
+        }
+      });
+      dom.themeChoices.appendChild(btn);
+    });
+  }
+};
+
+const SourceManager = {
+  scaleSubject(sw, sh) {
+    let w = sw;
+    let h = sh;
+    let area = w * h;
+    let scale = 1;
+    let shrunk = false;
+    const board = W * H;
+    while (area / board > 0.35 || w > W * 0.9 || h > H * 0.9) {
+      scale -= 0.01;
+      w = sw * scale;
+      h = sh * scale;
+      area = w * h;
+      shrunk = true;
+      if (scale <= 0.1) break;
+    }
+    if (!shrunk) {
+      while (area / board < 0.35 && w < W * 0.9 && h < H * 0.9) {
+        scale += 0.01;
+        w = sw * scale;
+        h = sh * scale;
+        area = w * h;
+        if (scale >= 3) break;
+      }
+    }
+    return { width: Math.round(w), height: Math.round(h), scale };
+  },
+  cutChoices(subject, min, def) {
+    if (!subject) return [];
+    const out = [];
+    let rows = 0;
+    let cols = 0;
+    let nop = 0;
+    let size = Math.floor(Math.max(subject.width, subject.height) / 3);
+    let selected = false;
+    while (nop < 1000 && size > 10) {
+      rows = Math.floor(subject.height / size);
+      cols = Math.floor(subject.width / size);
+      nop = rows * cols;
+      if (nop >= 6 && nop >= min) {
+        const pick = !selected && nop >= def;
+        out.push({ nop, rows, cols, size, selected: pick });
+        if (pick) selected = true;
+      }
+      size = Math.max(Math.floor(subject.height / (rows + 1)), Math.floor(subject.width / (cols + 1)));
+    }
+    if (!selected && out.length) out[out.length - 1].selected = true;
+    return out;
+  },
+  async setSource(img, url, name, demo, persistedDataUrl) {
+    if (app.srcUrl && app.srcUrl.startsWith("blob:")) URL.revokeObjectURL(app.srcUrl);
+    app.src = img;
+    app.srcUrl = url;
+    app.srcName = name;
+    app.demo = !!demo;
+    app.sourceDataUrl = persistedDataUrl || await Utils.imageToDataUrl(img);
+    this.refreshSourceUi();
+    UI.syncToolbar();
+  },
+  refreshSourceUi() {
+    if (!app.src) return;
+    app.subject = this.scaleSubject(app.src.naturalWidth, app.src.naturalHeight);
+    app.choices = this.cutChoices(app.subject, 24, DEFAULT_NOP);
+    if (!app.choice || !app.choices.some(choice => choice.nop === app.choice.nop)) {
+      app.choice = app.choices.find(choice => choice.selected) || app.choices[0];
+    }
+    dom.pickerImg.src = app.srcUrl;
+    dom.previewImg.src = app.srcUrl;
+    dom.pickerName.textContent = app.srcName;
+    dom.pickerSize.textContent = `${app.src.naturalWidth} x ${app.src.naturalHeight}`;
+    dom.sumSource.textContent = `${app.src.naturalWidth} x ${app.src.naturalHeight}`;
+    dom.sumSubject.textContent = `${app.subject.width} x ${app.subject.height}`;
+    dom.sumChoice.textContent = app.choice ? `${app.choice.nop} 块` : "-";
+    dom.panelNote.textContent = app.choice
+      ? `推荐布局：${app.choice.rows} x ${app.choice.cols} = ${app.choice.nop} 块。中间保留工作区，碎片沿边缘螺旋散开，更贴近原版体验。`
+      : "当前图片没有得到可用切块方案。";
+    UI.renderChoices();
+    UI.updateIdleUi();
+  },
+  async handleFile(file) {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = async () => {
+      await this.setSource(img, url, file.name, false);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      Utils.showBanner("图片加载失败");
+    };
+    img.src = url;
+  },
+  demoAsset() {
+    return new Promise(resolve => {
+      const c = document.createElement("canvas");
+      const g = c.getContext("2d");
+      c.width = 1600;
+      c.height = 980;
+      const sky = g.createLinearGradient(0, 0, 0, c.height * 0.72);
+      sky.addColorStop(0, "#f7d9a8");
+      sky.addColorStop(0.45, "#c5dceb");
+      sky.addColorStop(1, "#6f93b5");
+      g.fillStyle = sky;
+      g.fillRect(0, 0, c.width, c.height);
+      g.fillStyle = "rgba(255,244,207,.88)";
+      g.beginPath();
+      g.arc(1180, 170, 92, 0, Math.PI * 2);
+      g.fill();
+      const sea = g.createLinearGradient(0, c.height * 0.55, 0, c.height);
+      sea.addColorStop(0, "#6da1b5");
+      sea.addColorStop(1, "#234f62");
+      g.fillStyle = sea;
+      g.fillRect(0, c.height * 0.55, c.width, c.height * 0.45);
+      g.fillStyle = "rgba(255,255,255,.18)";
+      for (let i = 0; i < 10; i++) g.fillRect(0, 610 + i * 34, c.width, 3);
+      g.fillStyle = "#516c7c";
+      g.beginPath();
+      g.moveTo(0, 520);
+      g.lineTo(260, 320);
+      g.lineTo(420, 470);
+      g.lineTo(630, 270);
+      g.lineTo(920, 500);
+      g.lineTo(1180, 300);
+      g.lineTo(1600, 540);
+      g.lineTo(1600, 640);
+      g.lineTo(0, 640);
+      g.closePath();
+      g.fill();
+      g.fillStyle = "#f3f0e6";
+      for (let i = 0; i < 10; i++) {
+        const x = 160 + i * 110 + (i % 2) * 18;
+        const w = 72 + ((i * 19) % 22);
+        const h = 110 + ((i * 31) % 86);
+        const y = 560 - h;
+        g.fillRect(x, y, w, h);
+        g.fillStyle = "#c5794c";
+        g.fillRect(x - 6, y - 14, w + 12, 16);
+        g.fillStyle = "#f3f0e6";
+        for (let ry = 0; ry < 4; ry++) {
+          for (let rx = 0; rx < 3; rx++) g.fillRect(x + 12 + rx * 18, y + 14 + ry * 20, 10, 12);
+        }
+      }
+      g.fillStyle = "#f0efe8";
+      g.fillRect(1210, 350, 40, 250);
+      g.fillStyle = "#d45f3c";
+      g.fillRect(1198, 332, 64, 24);
+      g.fillStyle = "#203140";
+      g.fillRect(1223, 308, 14, 40);
+      g.fillStyle = "rgba(255,247,198,.35)";
+      g.beginPath();
+      g.moveTo(1230, 330);
+      g.lineTo(1600, 180);
+      g.lineTo(1600, 500);
+      g.closePath();
+      g.fill();
+      g.fillStyle = "#d1b98e";
+      g.fillRect(0, 760, c.width, 220);
+      g.fillStyle = "#b48c63";
+      for (let i = 0; i < 18; i++) g.fillRect(i * 98, 782 + (i % 3) * 6, 64, 5);
+      g.fillStyle = "rgba(17,32,47,.66)";
+      g.font = '700 86px "Baskerville Old Face","Palatino Linotype",serif';
+      g.fillText("Harbor Light", 84, 132);
+      g.font = '700 22px "Cascadia Mono","Consolas",monospace';
+      g.fillText("Demo image for a JIGEX-style puzzle workflow", 92, 170);
+      const url = c.toDataURL("image/png");
+      const img = new Image();
+      img.onload = () => resolve({ img, url, name: "Harbor Light (Demo)" });
+      img.src = url;
+    });
+  },
+  loadImageFromDataUrl(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+  }
+};
+
+const PieceFactory = {
+  edge(span, random) {
+    return {
+      border: false,
+      tab: random() >= 0.5,
+      thick: Math.max(12, Math.round(span * (0.16 + random() * 0.08))),
+      sh: 0.18 + random() * 0.06,
+      cr: 0.18 + random() * 0.06,
+      pi: 0.05 + random() * 0.04
+    };
+  },
+  flip(edge) {
+    return { border: false, tab: !edge.tab, thick: edge.thick, sh: edge.sh, cr: edge.cr, pi: edge.pi };
+  },
+  buildPieces(subject, choice, seed) {
+    const random = Utils.rng(seed);
+    const grid = Array.from({ length: choice.rows }, () => Array(choice.cols).fill(null));
+    const list = [];
+    const wRem = subject.width % choice.size;
+    const hRem = subject.height % choice.size;
+    const wChunk = Math.floor(wRem / choice.cols);
+    const hChunk = Math.floor(hRem / choice.rows);
+    let y = 0;
+    for (let row = 0; row < choice.rows; row++) {
+      let h = choice.size;
+      const extra = hRem - hChunk * row - Math.min(row, hRem % choice.rows);
+      if (extra > 0) {
+        h += hChunk;
+        if ((hRem % choice.rows) - row > 0) h++;
+      }
+      let x = 0;
+      for (let col = 0; col < choice.cols; col++) {
+        let w = choice.size;
+        const extraW = wRem - wChunk * col - Math.min(col, wRem % choice.cols);
+        if (extraW > 0) {
+          w += wChunk;
+          if ((wRem % choice.cols) - col > 0) w++;
+        }
+        const piece = {
+          id: list.length + 1,
+          row, col,
+          imgX: x,
+          imgY: y,
+          refX: x + w / 2,
+          refY: y + h / 2,
+          core: { width: w, height: h, x: 0, y: 0 },
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          angle: 0,
+          isEdge: false,
+          sort: random(),
+          group: null,
+          canvas: null,
+          alpha: null,
+          neighbors: [],
+          map: { top: null, right: null, bottom: null, left: null },
+          edges: { top: {}, right: {}, bottom: {}, left: {} }
+        };
+        grid[row][col] = piece;
+        list.push(piece);
+        x += w;
+      }
+      y += h;
+    }
+    for (let row = 0; row < choice.rows; row++) {
+      for (let col = 0; col < choice.cols; col++) {
+        const piece = grid[row][col];
+        const top = row === 0;
+        const left = col === 0;
+        const right = col === choice.cols - 1;
+        const bottom = row === choice.rows - 1;
+        piece.edges.top = top ? { border: true, tab: false, thick: 0 } : this.flip(grid[row - 1][col].edges.bottom);
+        piece.edges.left = left ? { border: true, tab: false, thick: 0 } : this.flip(grid[row][col - 1].edges.right);
+        piece.edges.right = right ? { border: true, tab: false, thick: 0 } : this.edge(piece.core.height, random);
+        piece.edges.bottom = bottom ? { border: true, tab: false, thick: 0 } : this.edge(piece.core.width, random);
+        piece.width = piece.edges.left.thick + piece.core.width + piece.edges.right.thick + MARGIN * 2;
+        piece.height = piece.edges.top.thick + piece.core.height + piece.edges.bottom.thick + MARGIN * 2;
+        piece.core.x = piece.edges.left.thick + MARGIN;
+        piece.core.y = piece.edges.top.thick + MARGIN;
+        piece.isEdge = top || left || right || bottom;
+      }
+    }
+    for (let row = 0; row < choice.rows; row++) {
+      for (let col = 0; col < choice.cols; col++) {
+        const piece = grid[row][col];
+        piece.map.top = row ? grid[row - 1][col] : null;
+        piece.map.right = col < choice.cols - 1 ? grid[row][col + 1] : null;
+        piece.map.bottom = row < choice.rows - 1 ? grid[row + 1][col] : null;
+        piece.map.left = col ? grid[row][col - 1] : null;
+        piece.neighbors = Object.values(piece.map).filter(Boolean);
+      }
+    }
+    return list;
+  },
+  topEdge(c, x, y, size, edge) {
+    if (edge.border) { c.lineTo(x + size, y); return; }
+    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi, ctr = x + size / 2, l = ctr - cr - pi, r = ctr + cr + pi, d = edge.tab ? -edge.thick : edge.thick;
+    c.lineTo(x + sh, y);
+    c.bezierCurveTo(x + size * 0.28, y, l - size * 0.04, y + d * 0.36, l, y + d * 0.56);
+    c.bezierCurveTo(ctr - cr * 0.48, y + d, ctr + cr * 0.48, y + d, r, y + d * 0.56);
+    c.bezierCurveTo(r + size * 0.04, y + d * 0.36, x + size * 0.72, y, x + size - sh, y);
+    c.lineTo(x + size, y);
+  },
+  rightEdge(c, x, y, size, edge) {
+    if (edge.border) { c.lineTo(x, y + size); return; }
+    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi, ctr = y + size / 2, t = ctr - cr - pi, b = ctr + cr + pi, d = edge.tab ? edge.thick : -edge.thick;
+    c.lineTo(x, y + sh);
+    c.bezierCurveTo(x, y + size * 0.28, x + d * 0.36, t - size * 0.04, x + d * 0.56, t);
+    c.bezierCurveTo(x + d, ctr - cr * 0.48, x + d, ctr + cr * 0.48, x + d * 0.56, b);
+    c.bezierCurveTo(x + d * 0.36, b + size * 0.04, x, y + size * 0.72, x, y + size - sh);
+    c.lineTo(x, y + size);
+  },
+  bottomEdge(c, x, y, size, edge) {
+    if (edge.border) { c.lineTo(x - size, y); return; }
+    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi, ctr = x - size / 2, l = ctr - cr - pi, r = ctr + cr + pi, d = edge.tab ? edge.thick : -edge.thick;
+    c.lineTo(x - sh, y);
+    c.bezierCurveTo(x - size * 0.28, y, r + size * 0.04, y + d * 0.36, r, y + d * 0.56);
+    c.bezierCurveTo(ctr + cr * 0.48, y + d, ctr - cr * 0.48, y + d, l, y + d * 0.56);
+    c.bezierCurveTo(l - size * 0.04, y + d * 0.36, x - size * 0.72, y, x - size + sh, y);
+    c.lineTo(x - size, y);
+  },
+  leftEdge(c, x, y, size, edge) {
+    if (edge.border) { c.lineTo(x, y - size); return; }
+    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi, ctr = y - size / 2, t = ctr - cr - pi, b = ctr + cr + pi, d = edge.tab ? -edge.thick : edge.thick;
+    c.lineTo(x, y - sh);
+    c.bezierCurveTo(x, y - size * 0.28, x + d * 0.36, b + size * 0.04, x + d * 0.56, b);
+    c.bezierCurveTo(x + d, ctr + cr * 0.48, x + d, ctr - cr * 0.48, x + d * 0.56, t);
+    c.bezierCurveTo(x + d * 0.36, t - size * 0.04, x, y - size * 0.72, x, y - size + sh);
+    c.lineTo(x, y - size);
+  },
+  outline(c, piece) {
+    const x = piece.core.x, y = piece.core.y, w = piece.core.width, h = piece.core.height;
+    c.beginPath();
+    c.moveTo(x, y);
+    this.topEdge(c, x, y, w, piece.edges.top);
+    this.rightEdge(c, x + w, y, h, piece.edges.right);
+    this.bottomEdge(c, x + w, y + h, w, piece.edges.bottom);
+    this.leftEdge(c, x, y + h, h, piece.edges.left);
+    c.closePath();
+  },
+  subjectCanvas(img, subject) {
+    const canvas = document.createElement("canvas");
+    canvas.width = subject.width;
+    canvas.height = subject.height;
+    canvas.getContext("2d").drawImage(img, 0, 0, subject.width, subject.height);
+    return canvas;
+  },
+  paintPieces(list, subCanvas) {
+    list.forEach(piece => {
+      const canvas = document.createElement("canvas");
+      const g = canvas.getContext("2d");
+      canvas.width = Math.ceil(piece.width);
+      canvas.height = Math.ceil(piece.height);
+      this.outline(g, piece);
+      g.save();
+      g.clip();
+      g.drawImage(subCanvas, piece.core.x - piece.imgX, piece.core.y - piece.imgY);
+      const gloss = g.createLinearGradient(0, 0, 0, canvas.height);
+      gloss.addColorStop(0, "rgba(255,255,255,.22)");
+      gloss.addColorStop(0.55, "rgba(255,255,255,.05)");
+      gloss.addColorStop(1, "rgba(17,32,47,.08)");
+      g.fillStyle = gloss;
+      g.fillRect(0, 0, canvas.width, canvas.height);
+      g.restore();
+      this.outline(g, piece);
+      g.lineWidth = 1.2;
+      g.strokeStyle = "rgba(20,35,52,.58)";
+      g.stroke();
+      this.outline(g, piece);
+      g.lineWidth = 0.8;
+      g.strokeStyle = "rgba(255,255,255,.45)";
+      g.stroke();
+      piece.canvas = canvas;
+      piece.alpha = g.getImageData(0, 0, canvas.width, canvas.height).data;
+    });
+  },
+  renderSize(piece) {
+    return piece.angle % 180 === 0 ? { w: piece.width, h: piece.height } : { w: piece.height, h: piece.width };
+  },
+  bounds(piece) {
+    const size = this.renderSize(piece);
+    return { x: piece.x - size.w / 2, y: piece.y - size.h / 2, w: size.w, h: size.h };
+  },
+  groupBounds(group) {
+    let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+    group.pieces.forEach(piece => {
+      const b = this.bounds(piece);
+      minX = Math.min(minX, b.x);
+      minY = Math.min(minY, b.y);
+      maxX = Math.max(maxX, b.x + b.w);
+      maxY = Math.max(maxY, b.y + b.h);
+    });
+    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+  },
+  seq(items) {
+    const left = items.slice().sort((a, b) => a.sort - b.sort);
+    const out = [];
+    let prev = null;
+    let retries = 0;
+    while (left.length) {
+      const cur = left.pop();
+      if (prev && cur.neighbors && cur.neighbors.includes(prev) && retries !== 5) {
+        left.unshift(cur);
+        retries++;
+        continue;
+      }
+      out.push(cur);
+      prev = cur;
+      retries = 0;
+    }
+    return out;
+  },
+  getSubjectRect(subject) {
+    return { x: (W - subject.width) / 2, y: (H - subject.height) / 2, w: subject.width, h: subject.height, cx: W / 2, cy: H / 2 };
+  },
+  getReserveRects(subjectRect, previewOn) {
+    const list = [Utils.padRect({ x: subjectRect.x, y: subjectRect.y, w: subjectRect.w, h: subjectRect.h }, 34)];
+    if (previewOn) list.push(Utils.padRect({ x: 18, y: 18, w: 220, h: 196 }, 14));
+    return list;
+  },
+  scatterPieces(specs, subject, seed, previewOn) {
+    const order = this.seq(specs);
+    const subjectRect = this.getSubjectRect(subject);
+    const reserve = this.getReserveRects(subjectRect, previewOn);
+    const random = Utils.rng(seed);
+    let avgW = 0, avgH = 0;
+    specs.forEach(piece => {
+      const size = this.renderSize(piece);
+      avgW += size.w - MARGIN * 2;
+      avgH += size.h - MARGIN * 2;
+    });
+    avgW = (avgW * 1.06) / Math.max(1, specs.length);
+    avgH = (avgH * 1.06) / Math.max(1, specs.length);
+    const qx = avgW / 4, qy = avgH / 4;
+    const colsFloat = W / avgW, rowsFloat = H / avgH;
+    const cols = Math.max(1, Math.round(colsFloat));
+    const rows = Math.max(1, Math.round(rowsFloat));
+    const cellW = avgW * (colsFloat / cols);
+    const cellH = avgH * (rowsFloat / rows);
+    const gapX = W - subject.width;
+    const gapY = H - subject.height;
+    let currentX = avgW / 2, currentY = avgH / 2;
+    let rightLimit = W, bottomLimit = H, leftLimit = 0, topLimit = cellH;
+    let direction = 3, limitVertical = 999, limitHorizontal = 999;
+    if (gapX < gapY) limitHorizontal = Math.floor(gapX / cellW);
+    else limitVertical = Math.floor(gapY / cellH);
+    const placed = [];
+    const queue = order.slice();
+    const guardLimit = Math.max(260, order.length * 96);
+    let guard = 0;
+    while (queue.length && guard < guardLimit) {
+      guard++;
+      const piece = queue.pop();
+      const size = this.renderSize(piece);
+      const slot = { x: currentX - size.w / 2, y: currentY - size.h / 2, w: size.w, h: size.h };
+      const blocked = reserve.some(rect => Utils.hitRect(Utils.padRect(slot, size.w / 5, size.h / 5), rect));
+      const canPlace = !blocked && (((direction === 3 || direction === 2) && limitVertical > 0) || ((direction === 0 || direction === 1) && limitHorizontal > 0));
+      if (canPlace) {
+        const jitterX = (random() - 0.5) * cellW * 0.16;
+        const jitterY = (random() - 0.5) * cellH * 0.16;
+        piece.x = Utils.clamp(currentX + jitterX, size.w / 2 + 12, W - size.w / 2 - 12);
+        piece.y = Utils.clamp(currentY + jitterY, size.h / 2 + 12, H - size.h / 2 - 12);
+        piece.homeX = piece.x;
+        piece.homeY = piece.y;
+        placed.push(piece);
+      } else {
+        queue.unshift(piece);
+      }
+      const stepX = blocked ? cellW / 2 : cellW;
+      const stepY = blocked ? cellH / 2 : cellH;
+      let nextX, nextY;
+      switch (direction) {
+        case 3:
+          nextX = currentX + stepX;
+          if (nextX > rightLimit - qx) {
+            direction = 1;
+            limitVertical--;
+            currentX = rightLimit - avgW / 2;
+            if (canPlace) currentY += stepY;
+            if (limitHorizontal > 0) rightLimit -= cellW;
+          } else currentX = nextX;
+          break;
+        case 1:
+          nextY = currentY + stepY;
+          if (nextY > bottomLimit - qy) {
+            direction = 2;
+            limitHorizontal--;
+            currentY = bottomLimit - avgH / 2;
+            if (canPlace) currentX -= stepX;
+            if (limitVertical > 0) bottomLimit -= cellH;
+          } else currentY = nextY;
+          break;
+        case 2:
+          nextX = currentX - stepX;
+          if (nextX < leftLimit + qx) {
+            direction = 0;
+            limitVertical--;
+            currentX = leftLimit + avgW / 2;
+            if (canPlace) currentY -= stepY;
+            if (limitHorizontal > 0) leftLimit += cellW;
+          } else currentX = nextX;
+          break;
+        default:
+          nextY = currentY - stepY;
+          if (nextY < topLimit + qy) {
+            direction = 3;
+            limitHorizontal--;
+            currentY = topLimit + avgH / 2;
+            if (canPlace) currentX += stepX;
+            if (limitVertical > 0) topLimit += cellH;
+          } else currentY = nextY;
+          break;
+      }
+    }
+    if (placed.length < specs.length) {
+      const missing = specs.filter(piece => !placed.includes(piece));
+      missing.forEach(piece => {
+        const size = this.renderSize(piece);
+        let found = false;
+        for (let y = size.h / 2 + 16; y < H - size.h / 2 - 16 && !found; y += Math.max(18, Math.round(cellH * 0.55))) {
+          for (let x = size.w / 2 + 16; x < W - size.w / 2 - 16 && !found; x += Math.max(18, Math.round(cellW * 0.55))) {
+            const rect = { x: x - size.w / 2, y: y - size.h / 2, w: size.w, h: size.h };
+            if (reserve.some(box => Utils.hitRect(Utils.padRect(rect, 8), box))) continue;
+            if (placed.some(other => Utils.hitRect(Utils.padRect(rect, 4), this.bounds(other)))) continue;
+            piece.x = x;
+            piece.y = y;
+            piece.homeX = x;
+            piece.homeY = y;
+            placed.push(piece);
+            found = true;
+          }
+        }
+        if (!found) {
+          piece.x = Utils.clamp(currentX, size.w / 2 + 12, W - size.w / 2 - 12);
+          piece.y = Utils.clamp(currentY, size.h / 2 + 12, H - size.h / 2 - 12);
+          piece.homeX = piece.x;
+          piece.homeY = piece.y;
+          placed.push(piece);
+        }
+      });
+    }
+    return { pieces: placed, subjectRect, reserve };
+  }
+};
+
+class PuzzleGame {
+  constructor(img, subject, choice, options) {
+    this.img = img;
+    this.subject = subject;
+    this.choice = choice;
+    this.title = options.title || "Puzzle";
+    this.srcUrl = options.srcUrl || "";
+    this.sourceDataUrl = options.sourceDataUrl || "";
+    this.allowRotate = !!options.rotate;
+    this.showPreview = !!options.preview;
+    this.themeName = options.themeName || app.themeName;
+    this.baseSeed = Utils.hash(`${this.title}-${choice.nop}-${img.naturalWidth}x${img.naturalHeight}`);
+    this.scatterNonce = 0;
+    this.edgeOnly = false;
+    this.paused = false;
+    this.complete = false;
+    this.moves = 0;
+    this.elapsedLocked = 0;
+    this.timerStart = performance.now();
+    this.drag = null;
+    this.hoverPiece = null;
+    this.focusPiece = null;
+    this.zCounter = 0;
+    this.subCanvas = PieceFactory.subjectCanvas(img, subject);
+    this.pieces = PieceFactory.buildPieces(subject, choice, this.baseSeed);
+    PieceFactory.paintPieces(this.pieces, this.subCanvas);
+    this.tick = this.tick.bind(this);
+    this.reset(true);
+    this.raf = requestAnimationFrame(this.tick);
+  }
+
+  destroy() {
+    cancelAnimationFrame(this.raf);
+  }
+
+  currentElapsed() {
+    return this.elapsedLocked + ((!this.paused && !this.complete) ? performance.now() - this.timerStart : 0);
+  }
+
+  largestGroup() {
+    return this.groups.reduce((max, group) => Math.max(max, group.pieces.length), 0);
+  }
+
+  modeText() {
+    if (this.complete) return "Complete";
+    if (this.paused) return "Paused";
+    return this.edgeOnly ? "Edge Only" : "Playing";
+  }
+
+  syncPreview() {
+    dom.previewBox.classList.toggle("hidden", !this.showPreview);
+    dom.previewImg.src = this.srcUrl;
+    dom.previewTitle.textContent = this.title;
+    dom.previewMeta.textContent = `${this.choice.rows} x ${this.choice.cols} · ${this.subject.width} x ${this.subject.height}`;
+  }
+
+  updateUi() {
+    dom.stPieces.textContent = String(this.choice.nop);
+    dom.stProgress.textContent = `${Math.round(this.largestGroup() / this.pieces.length * 100)}%`;
+    dom.stMoves.textContent = String(this.moves);
+    dom.stTime.textContent = Utils.time(this.currentElapsed());
+    dom.stMode.textContent = this.modeText();
+    dom.stTheme.textContent = (THEMES[this.themeName] || THEMES.blue).name;
+    dom.stTitle.textContent = this.title;
+  }
+
+  reset(fresh) {
+    const random = Utils.rng((this.baseSeed ^ ((this.scatterNonce + 1) * 2654435761)) >>> 0);
+    this.groups = [];
+    this.zCounter = 0;
+    this.pieces.forEach(piece => {
+      piece.angle = this.allowRotate ? [0, 90, 180, 270][Math.floor(random() * 4)] : 0;
+      const group = { id: this.groups.length + 1, pieces: [piece] };
+      piece.group = group;
+      piece.z = ++this.zCounter;
+      this.groups.push(group);
+    });
+    const spread = PieceFactory.scatterPieces(this.pieces, this.subject, (this.baseSeed ^ (this.scatterNonce * 977 + 17)) >>> 0, this.showPreview);
+    this.subjectRect = spread.subjectRect;
+    this.reserve = spread.reserve;
+    this.drag = null;
+    this.hoverPiece = null;
+    this.focusPiece = null;
+    this.complete = false;
+    this.paused = false;
+    if (fresh) {
+      this.moves = 0;
+      this.elapsedLocked = 0;
+    }
+    this.timerStart = performance.now();
+    this.syncPreview();
+    this.updateUi();
+  }
+
+  shuffle() {
+    this.scatterNonce++;
+    this.reset(true);
+  }
+
+  drawBackdrop() {
+    const theme = THEMES[this.themeName] || THEMES.blue;
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, theme.bg1);
+    bg.addColorStop(1, theme.bg2);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "rgba(255,255,255,.12)";
+    for (let x = 0; x < W; x += 40) ctx.fillRect(x, 0, 1, H);
+    for (let y = 0; y < H; y += 40) ctx.fillRect(0, y, W, 1);
+    Utils.roundRect(14, 14, W - 28, H - 28, 28);
+    ctx.fillStyle = "rgba(243,247,249,.18)";
+    ctx.fill();
+    const s = this.subjectRect;
+    Utils.roundRect(s.x - 18, s.y - 18, s.w + 36, s.h + 36, 24);
+    ctx.fillStyle = "rgba(255,255,255,.24)";
+    ctx.fill();
+    ctx.setLineDash([12, 10]);
+    ctx.strokeStyle = "rgba(32,49,64,.2)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.save();
+    ctx.globalAlpha = 0.16;
+    ctx.drawImage(this.img, s.x, s.y, s.w, s.h);
+    ctx.restore();
+    ctx.fillStyle = "rgba(20,45,67,.55)";
+    ctx.font = `700 12px ${getComputedStyle(document.documentElement).getPropertyValue("--mono")}`;
+    ctx.fillText("WORK AREA", s.x, s.y - 26);
+  }
+
+  drawPiece(piece) {
+    const focused = this.focusPiece && this.focusPiece.group === piece.group;
+    const dragging = this.drag && this.drag.group === piece.group;
+    ctx.save();
+    ctx.translate(piece.x, piece.y);
+    ctx.rotate(Utils.rad(piece.angle));
+    ctx.shadowColor = dragging ? "rgba(10,23,34,.34)" : "rgba(10,23,34,.16)";
+    ctx.shadowBlur = dragging ? 28 : 15;
+    ctx.shadowOffsetY = dragging ? 10 : 6;
+    ctx.drawImage(piece.canvas, -piece.width / 2, -piece.height / 2);
+    if (focused) {
+      ctx.shadowColor = "transparent";
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(252,208,129,.95)";
+      ctx.strokeRect(-piece.width / 2 + 3, -piece.height / 2 + 3, piece.width - 6, piece.height - 6);
+    }
+    ctx.restore();
+  }
+
+  drawOverlay(title, sub) {
+    ctx.save();
+    ctx.fillStyle = "rgba(10,23,34,.34)";
+    ctx.fillRect(0, 0, W, H);
+    Utils.roundRect(W / 2 - 210, H / 2 - 84, 420, 168, 26);
+    ctx.fillStyle = "rgba(249,251,252,.94)";
+    ctx.fill();
+    ctx.fillStyle = "#203140";
+    ctx.textAlign = "center";
+    ctx.font = `700 34px ${getComputedStyle(document.documentElement).getPropertyValue("--display")}`;
+    ctx.fillText(title, W / 2, H / 2 - 14);
+    ctx.font = `600 13px ${getComputedStyle(document.documentElement).getPropertyValue("--mono")}`;
+    ctx.fillStyle = "rgba(32,49,64,.68)";
+    ctx.fillText(sub, W / 2, H / 2 + 24);
+    ctx.restore();
+  }
+
+  render() {
+    ctx.clearRect(0, 0, W, H);
+    this.drawBackdrop();
+    this.pieces.slice().sort((a, b) => a.z - b.z).forEach(piece => {
+      if (this.edgeOnly && !piece.isEdge) return;
+      this.drawPiece(piece);
+    });
+    if (this.paused) this.drawOverlay("已暂停", "按 Space 或点击暂停按钮继续");
+    if (this.complete) this.drawOverlay("拼图完成", `用时 ${Utils.time(this.elapsedLocked)} · 移动 ${this.moves}`);
+  }
+
+  tick() {
+    this.render();
+    this.updateUi();
+    this.raf = requestAnimationFrame(this.tick);
+  }
+
+  hitPiece(point, piece) {
+    const box = PieceFactory.bounds(piece);
+    if (point.x < box.x || point.x > box.x + box.w || point.y < box.y || point.y > box.y + box.h) return false;
+    const local = Utils.rotate(point.x - piece.x, point.y - piece.y, -piece.angle);
+    const lx = Math.floor(local.x + piece.width / 2);
+    const ly = Math.floor(local.y + piece.height / 2);
+    if (lx < 0 || ly < 0 || lx >= piece.canvas.width || ly >= piece.canvas.height) return false;
+    return piece.alpha[(ly * piece.canvas.width + lx) * 4 + 3] > 24;
+  }
+
+  pick(point) {
+    const sorted = this.pieces.slice().sort((a, b) => b.z - a.z);
+    for (const piece of sorted) {
+      if (this.edgeOnly && !piece.isEdge) continue;
+      if (this.hitPiece(point, piece)) return piece;
+    }
+    return null;
+  }
+
+  raiseGroup(group) {
+    let z = (++this.zCounter) * 10;
+    group.pieces.forEach(piece => {
+      piece.z = z++;
+    });
+  }
+
+  keepGroupInBounds(group) {
+    const box = PieceFactory.groupBounds(group);
+    let dx = 0;
+    let dy = 0;
+    if (box.x < 12) dx = 12 - box.x;
+    if (box.x + box.w > W - 12) dx = (W - 12) - (box.x + box.w);
+    if (box.y < 12) dy = 12 - box.y;
+    if (box.y + box.h > H - 12) dy = (H - 12) - (box.y + box.h);
+    if (dx || dy) group.pieces.forEach(piece => {
+      piece.x += dx;
+      piece.y += dy;
+    });
+  }
+
+  translateGroup(group, dx, dy) {
+    group.pieces.forEach(piece => {
+      piece.x += dx;
+      piece.y += dy;
+    });
+    this.keepGroupInBounds(group);
+  }
+
+  pointerDown(point) {
+    if (this.paused || this.complete) return false;
+    const piece = this.pick(point);
+    this.hoverPiece = piece;
+    if (!piece) return false;
+    this.focusPiece = piece;
+    this.raiseGroup(piece.group);
+    this.drag = {
+      piece,
+      group: piece.group,
+      offsetX: point.x - piece.x,
+      offsetY: point.y - piece.y,
+      startX: point.x,
+      startY: point.y,
+      moved: false
+    };
+    return true;
+  }
+
+  pointerMove(point) {
+    if (this.drag) {
+      const targetX = point.x - this.drag.offsetX;
+      const targetY = point.y - this.drag.offsetY;
+      const dx = targetX - this.drag.piece.x;
+      const dy = targetY - this.drag.piece.y;
+      if (dx || dy) this.translateGroup(this.drag.group, dx, dy);
+      if (Math.hypot(point.x - this.drag.startX, point.y - this.drag.startY) > 3) this.drag.moved = true;
+      return true;
+    }
+    this.hoverPiece = this.pick(point);
+    return !!this.hoverPiece;
+  }
+
+  pointerUp() {
+    if (!this.drag) return false;
+    const drag = this.drag;
+    this.drag = null;
+    if (drag.moved) {
+      this.moves++;
+      const merged = this.snapGroup(drag.group);
+      this.focusPiece = merged.pieces[0];
+    }
+    return true;
+  }
+
+  findSnap(group) {
+    const threshold = Math.max(18, Math.round(this.choice.size * 0.28));
+    let best = null;
+    for (const piece of group.pieces) {
+      for (const other of piece.neighbors) {
+        if (!other || other.group === group) continue;
+        if (piece.angle !== other.angle) continue;
+        const expected = Utils.rotate(piece.refX - other.refX, piece.refY - other.refY, piece.angle);
+        const dx = expected.x - (piece.x - other.x);
+        const dy = expected.y - (piece.y - other.y);
+        const err = Math.hypot(dx, dy);
+        if (err <= threshold && (!best || err < best.err)) best = { piece, other, dx, dy, err };
+      }
+    }
+    return best;
+  }
+
+  mergeGroups(a, b) {
+    if (a === b) return a;
+    if (a.pieces.length < b.pieces.length) {
+      const temp = a;
+      a = b;
+      b = temp;
+    }
+    b.pieces.forEach(piece => {
+      piece.group = a;
+      a.pieces.push(piece);
+    });
+    this.groups = this.groups.filter(group => group !== b);
+    return a;
+  }
+
+  snapGroup(group) {
+    let active = group;
+    let joins = 0;
+    while (true) {
+      const snap = this.findSnap(active);
+      if (!snap) break;
+      this.translateGroup(active, snap.dx, snap.dy);
+      active = this.mergeGroups(active, snap.other.group);
+      this.raiseGroup(active);
+      joins++;
+    }
+    if (joins) {
+      if (active.pieces.length === this.pieces.length) {
+        this.elapsedLocked = this.currentElapsed();
+        this.complete = true;
+        Utils.showBanner("拼图完成");
+      } else {
+        Utils.showBanner(`已连接 ${active.pieces.length} 块`);
+      }
+    }
+    return active;
+  }
+
+  rotatePiece(piece, delta = 90) {
+    if (!this.allowRotate || this.paused || this.complete || !piece) return false;
+    const group = piece.group;
+    const anchor = (this.drag && this.drag.group === group)
+      ? { x: piece.x, y: piece.y }
+      : { x: PieceFactory.groupBounds(group).cx, y: PieceFactory.groupBounds(group).cy };
+    group.pieces.forEach(part => {
+      const next = Utils.rotate(part.x - anchor.x, part.y - anchor.y, delta);
+      part.x = anchor.x + next.x;
+      part.y = anchor.y + next.y;
+      part.angle = (part.angle + delta + 360) % 360;
+    });
+    this.keepGroupInBounds(group);
+    this.raiseGroup(group);
+    this.focusPiece = piece;
+    return true;
+  }
+
+  rotateAt(point, delta = 90) {
+    return this.rotatePiece(this.pick(point) || this.focusPiece || this.hoverPiece, delta);
+  }
+
+  togglePause() {
+    if (this.complete) return;
+    if (this.paused) {
+      this.paused = false;
+      this.timerStart = performance.now();
+      Utils.showBanner("继续游戏");
+    } else {
+      this.elapsedLocked = this.currentElapsed();
+      this.paused = true;
+      Utils.showBanner("已暂停");
+    }
+    this.updateUi();
+  }
+
+  snapshot() {
+    const pieces = this.pieces.map(piece => ({
+      id: piece.id,
+      x: Number(piece.x.toFixed(2)),
+      y: Number(piece.y.toFixed(2)),
+      angle: piece.angle,
+      z: piece.z,
+      groupId: this.groups.indexOf(piece.group) + 1
+    }));
+    return {
+      version: 1,
+      title: this.title,
+      sourceDataUrl: this.sourceDataUrl,
+      choice: { ...this.choice },
+      rotate: this.allowRotate,
+      preview: this.showPreview,
+      edgeOnly: this.edgeOnly,
+      themeName: this.themeName,
+      elapsedMs: Math.round(this.currentElapsed()),
+      moves: this.moves,
+      pieces
+    };
+  }
+
+  applySnapshot(snapshot) {
+    const byId = new Map(this.pieces.map(piece => [piece.id, piece]));
+    const groupMap = new Map();
+    snapshot.pieces.forEach(item => {
+      const piece = byId.get(item.id);
+      if (!piece) return;
+      piece.x = item.x;
+      piece.y = item.y;
+      piece.angle = item.angle;
+      piece.z = item.z;
+      if (!groupMap.has(item.groupId)) groupMap.set(item.groupId, { id: item.groupId, pieces: [] });
+      const group = groupMap.get(item.groupId);
+      group.pieces.push(piece);
+      piece.group = group;
+    });
+    this.groups = Array.from(groupMap.values()).sort((a, b) => a.id - b.id);
+    this.moves = snapshot.moves || 0;
+    this.elapsedLocked = snapshot.elapsedMs || 0;
+    this.complete = this.groups.some(group => group.pieces.length === this.pieces.length) || false;
+    this.paused = false;
+    this.timerStart = performance.now();
+    this.edgeOnly = !!snapshot.edgeOnly;
+    this.allowRotate = !!snapshot.rotate;
+    this.showPreview = !!snapshot.preview;
+    this.themeName = snapshot.themeName || app.themeName;
+    this.focusPiece = this.pieces[0] || null;
+    this.drag = null;
+    this.hoverPiece = null;
+    this.syncPreview();
+    this.updateUi();
+  }
+}
+
+const SaveSystem = {
+  hasSave() {
+    return !!localStorage.getItem(SAVE_KEY);
+  },
+  saveCurrent() {
+    if (!app.game) return;
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(app.game.snapshot()));
+      UI.syncToolbar();
+      Utils.showBanner("已保存到本地");
+    } catch (error) {
+      Utils.showBanner("存档失败，请尝试较小图片");
+      console.error(error);
+    }
+  },
+  async loadCurrent() {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) {
+      Utils.showBanner("没有可读取的本地存档");
+      return;
+    }
+    try {
+      const snapshot = JSON.parse(raw);
+      const img = await SourceManager.loadImageFromDataUrl(snapshot.sourceDataUrl);
+      await SourceManager.setSource(img, snapshot.sourceDataUrl, snapshot.title || "Saved Puzzle", false, snapshot.sourceDataUrl);
+      app.choice = snapshot.choice;
+      ThemeSystem.apply(snapshot.themeName || "blue");
+      dom.rotChk.checked = !!snapshot.rotate;
+      dom.boxChk.checked = !!snapshot.preview;
+      UI.renderChoices();
+      UI.updateIdleUi();
+      if (app.game) app.game.destroy();
+      app.game = new PuzzleGame(img, app.subject, snapshot.choice, {
+        rotate: snapshot.rotate,
+        preview: snapshot.preview,
+        srcUrl: snapshot.sourceDataUrl,
+        sourceDataUrl: snapshot.sourceDataUrl,
+        title: snapshot.title,
+        themeName: snapshot.themeName || "blue"
+      });
+      app.game.applySnapshot(snapshot);
+      UI.showPanel(false);
+      UI.syncToolbar();
+      Utils.showBanner("本地存档已恢复");
+    } catch (error) {
+      Utils.showBanner("存档恢复失败");
+      console.error(error);
+    }
+  },
+  clearCurrent() {
+    localStorage.removeItem(SAVE_KEY);
+    UI.syncToolbar();
+    Utils.showBanner("本地存档已清除");
+  }
+};
+
+const UI = {
+  showPanel(show) {
+    dom.panel.classList.toggle("hidden", !show);
+  },
+  syncToolbar() {
+    const game = app.game;
+    dom.shuffleBtn.disabled = !game;
+    dom.edgesBtn.disabled = !game;
+    dom.rotateBtn.disabled = !game;
+    dom.previewBtn.disabled = !game;
+    dom.pauseBtn.disabled = !game;
+    dom.saveBtn.disabled = !game;
+    dom.loadBtn.disabled = !SaveSystem.hasSave();
+    dom.clearSaveBtn.disabled = !SaveSystem.hasSave();
+    dom.edgesBtn.classList.toggle("active", !!game && game.edgeOnly);
+    dom.rotateBtn.classList.toggle("active", !!game && game.allowRotate);
+    dom.previewBtn.classList.toggle("active", !!game && game.showPreview);
+    dom.pauseBtn.classList.toggle("active", !!game && game.paused);
+    dom.pauseBtn.textContent = game && game.paused ? "继续" : "暂停";
+  },
+  updateIdleUi() {
+    dom.stPieces.textContent = app.choice ? String(app.choice.nop) : "-";
+    dom.stProgress.textContent = "0%";
+    dom.stMoves.textContent = "0";
+    dom.stTime.textContent = "00:00";
+    dom.stMode.textContent = "Idle";
+    dom.stTitle.textContent = app.srcName || "Demo";
+    dom.stTheme.textContent = (THEMES[app.themeName] || THEMES.blue).name;
+    dom.previewTitle.textContent = app.srcName || "Demo";
+    dom.previewMeta.textContent = app.subject && app.choice ? `${app.choice.rows} x ${app.choice.cols} · ${app.subject.width} x ${app.subject.height}` : "等待开始";
+    dom.previewBox.classList.toggle("hidden", !dom.boxChk.checked);
+  },
+  renderChoices() {
+    dom.choices.innerHTML = "";
+    app.choices.forEach(choice => {
+      const btn = document.createElement("button");
+      btn.className = `choice${app.choice && choice.nop === app.choice.nop ? " selected" : ""}`;
+      btn.innerHTML = `<span class="n">${choice.nop}</span><span class="g">${choice.rows} x ${choice.cols}</span>`;
+      btn.addEventListener("click", () => {
+        app.choice = choice;
+        this.renderChoices();
+        SourceManager.refreshSourceUi();
+      });
+      dom.choices.appendChild(btn);
+    });
+  },
+  launchGame(rotateOn, previewOn) {
+    if (!app.src || !app.choice) return;
+    if (app.game) app.game.destroy();
+    app.game = new PuzzleGame(app.src, app.subject, app.choice, {
+      rotate: rotateOn,
+      preview: previewOn,
+      srcUrl: app.srcUrl,
+      sourceDataUrl: app.sourceDataUrl,
+      title: app.srcName,
+      themeName: app.themeName
+    });
+    this.showPanel(false);
+    this.syncToolbar();
+    Utils.showBanner("拖动任意拼块开始");
+  }
+};
+
+function bindEvents() {
+  dom.openBtn.addEventListener("click", () => dom.fileInput.click());
+  dom.fileBtn.addEventListener("click", () => dom.fileInput.click());
+  dom.fileInput.addEventListener("change", event => SourceManager.handleFile(event.target.files[0]));
+  dom.demoBtn.addEventListener("click", async () => {
+    const asset = await SourceManager.demoAsset();
+    await SourceManager.setSource(asset.img, asset.url, asset.name, true, asset.url);
+  });
+  dom.piecesBtn.addEventListener("click", () => UI.showPanel(true));
+  dom.closeBtn.addEventListener("click", () => UI.showPanel(false));
+  dom.startBtn.addEventListener("click", () => UI.launchGame(dom.rotChk.checked, dom.boxChk.checked));
+  dom.shuffleBtn.addEventListener("click", () => app.game && app.game.shuffle());
+  dom.edgesBtn.addEventListener("click", () => {
+    if (!app.game) return;
+    app.game.edgeOnly = !app.game.edgeOnly;
+    app.game.updateUi();
+    UI.syncToolbar();
+  });
+  dom.rotateBtn.addEventListener("click", () => {
+    if (!app.game) return;
+    app.game.allowRotate = !app.game.allowRotate;
+    Utils.showBanner(app.game.allowRotate ? "旋转已开启" : "旋转已关闭");
+    UI.syncToolbar();
+  });
+  dom.previewBtn.addEventListener("click", () => {
+    if (!app.game) return;
+    app.game.showPreview = !app.game.showPreview;
+    app.game.syncPreview();
+    UI.syncToolbar();
+  });
+  dom.pauseBtn.addEventListener("click", () => {
+    if (!app.game) return;
+    app.game.togglePause();
+    UI.syncToolbar();
+  });
+  dom.saveBtn.addEventListener("click", () => SaveSystem.saveCurrent());
+  dom.loadBtn.addEventListener("click", () => SaveSystem.loadCurrent());
+  dom.clearSaveBtn.addEventListener("click", () => SaveSystem.clearCurrent());
+  dom.boxChk.addEventListener("change", () => !app.game && UI.updateIdleUi());
+
+  dom.game.addEventListener("pointerdown", event => {
+    if (!app.game) return;
+    if (app.game.pointerDown(Utils.boardPoint(event))) {
+      dom.game.setPointerCapture(event.pointerId);
+      dom.game.style.cursor = "grabbing";
+      event.preventDefault();
+    }
+  });
+  window.addEventListener("pointermove", event => {
+    if (!app.game) return;
+    app.game.pointerMove(Utils.boardPoint(event));
+    dom.game.style.cursor = app.game.drag ? "grabbing" : app.game.hoverPiece ? "grab" : "default";
+  });
+  window.addEventListener("pointerup", () => {
+    if (!app.game) return;
+    app.game.pointerUp();
+    dom.game.style.cursor = app.game.hoverPiece ? "grab" : "default";
+  });
+  dom.game.addEventListener("dblclick", event => {
+    if (app.game && app.game.rotateAt(Utils.boardPoint(event), 90)) {
+      Utils.showBanner("旋转 90 度");
+      event.preventDefault();
+    }
+  });
+  dom.game.addEventListener("wheel", event => {
+    if (app.game && app.game.rotateAt(Utils.boardPoint(event), event.deltaY < 0 ? 90 : -90)) {
+      Utils.showBanner("旋转拼块");
+      event.preventDefault();
+    }
+  }, { passive: false });
+  window.addEventListener("keydown", event => {
+    if (!app.game) return;
+    if (event.code === "Space") {
+      app.game.togglePause();
+      UI.syncToolbar();
+      event.preventDefault();
+    }
+    if (event.key === "e" || event.key === "E") {
+      app.game.edgeOnly = !app.game.edgeOnly;
+      app.game.updateUi();
+      UI.syncToolbar();
+      event.preventDefault();
+    }
+    if ((event.key === "r" || event.key === "R") && app.game.rotateAt(app.game.hoverPiece ? { x: app.game.hoverPiece.x, y: app.game.hoverPiece.y } : { x: W / 2, y: H / 2 }, 90)) {
+      Utils.showBanner("旋转 90 度");
+      event.preventDefault();
+    }
+    if ((event.key === "s" || event.key === "S") && (event.ctrlKey || event.metaKey)) {
+      SaveSystem.saveCurrent();
+      event.preventDefault();
+    }
+  });
+}
+
+async function init() {
+  ThemeSystem.apply("blue");
+  const asset = await SourceManager.demoAsset();
+  await SourceManager.setSource(asset.img, asset.url, asset.name, true, asset.url);
+  bindEvents();
+  UI.updateIdleUi();
+  UI.syncToolbar();
+}
+
+init();
+</script>
+</body>
+</html>

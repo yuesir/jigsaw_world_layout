@@ -1,0 +1,126 @@
+:root {
+  --bg: #1d2433;
+  --panel: #2a3145;
+  --ink: #f0f2f7;
+  --ink-dim: #aab0c0;
+  --accent: #62a5ff;
+  --border: #3a4262;
+  font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+#app {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+header h1 {
+  font-size: 26px;
+  margin: 0 0 4px;
+}
+
+header p {
+  margin: 0 0 18px;
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+.controls {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  background: var(--panel);
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.controls input[type='number'] {
+  width: 56px;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.controls select {
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.controls button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.controls button:hover {
+  filter: brightness(1.1);
+}
+
+.status {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.stage {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 14px;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  background: #0c0f17;
+  touch-action: none;
+}
+
+.status-block {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--ink-dim);
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  min-height: 40px;
+}

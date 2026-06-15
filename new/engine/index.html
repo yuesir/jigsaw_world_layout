@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jigsaw Engine — Theme Flyer Demo</title>
+    <link rel="stylesheet" href="/examples/theme-flyer/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Jigsaw Engine</h1>
+        <p>Part 4 demo — rendering & theme</p>
+      </header>
+
+      <section class="theme-picker" id="theme-picker"></section>
+
+      <section class="stage">
+        <canvas id="stage" width="800" height="500"></canvas>
+      </section>
+
+      <section class="controls">
+        <button id="add-clip">Add flying clip</button>
+        <button id="toggle-spin">Toggle spin</button>
+        <button id="trigger-context-loss">Simulate context loss</button>
+        <span id="fps" class="fps"></span>
+      </section>
+
+      <section class="status" id="status"></section>
+    </div>
+
+    <script type="module" src="/examples/theme-flyer/main.ts"></script>
+  </body>
+</html>

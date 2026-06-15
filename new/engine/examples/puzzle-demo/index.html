@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jigsaw Engine — Playable Puzzle Demo</title>
+    <link rel="stylesheet" href="/examples/puzzle-demo/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Jigsaw Engine — Playable Demo</h1>
+        <p>Drag pieces, drop on a neighbor to snap. <strong>Rotatable</strong> mode: scroll to rotate.</p>
+      </header>
+
+      <section class="controls">
+        <label>
+          <input type="checkbox" id="rotatable" />
+          Rotatable
+        </label>
+        <label>
+          Rows
+          <input type="number" id="rows" min="2" max="8" value="3" />
+        </label>
+        <label>
+          Cols
+          <input type="number" id="cols" min="2" max="8" value="3" />
+        </label>
+        <label>
+          Image
+          <select id="image">
+            <option value="gradient">Colorful Gradient</option>
+            <option value="checker">Checker</option>
+            <option value="circles">Concentric Circles</option>
+          </select>
+        </label>
+        <button id="new-puzzle">New Puzzle</button>
+        <button id="scatter">Re-scatter</button>
+        <span class="status" id="status">Click "New Puzzle" to start.</span>
+      </section>
+
+      <section class="stage">
+        <canvas id="stage" width="800" height="500"></canvas>
+      </section>
+
+      <section class="status-block" id="status-block"></section>
+    </div>
+
+    <script type="module" src="/examples/puzzle-demo/main.ts"></script>
+  </body>
+</html>

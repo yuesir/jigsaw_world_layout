@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>拼图引擎 Demo · 上传图片即玩</title>
+<!--
+  工业级拼图 Demo（单文件 · Canvas2D）
+  实现：上传图片 → 按尺寸算可选块数 → 离散档位选择 → 切图/散开/拖拽/吸附/拼合/完成
+  核心算法对应 docs/jigsaw_engine_build_guide.md：
+    §3.2.3 凸凹互补 · §3.3  预渲染掩码 · §3.5.1 吸附几何 · §3.5.4 螺旋散开
+-->
+<style>
+  :root {
+    --bg: #161b22;
+    --bg2: #0d1117;
+    --panel: #21262d;
+    --panel2: #30363d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #2f81f7;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --shadow: 0 8px 24px rgba(0,0,0,.4);
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: var(--bg2);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+  button:disabled { cursor: not-allowed; opacity: .4; }
+
+  /* ===== 三屏容器 ===== */
+  .screen {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; padding: 24px;
+    opacity: 0; pointer-events: none;
+    transition: opacity .25s ease;
+  }
+  .screen.active { opacity: 1; pointer-events: auto; }
+
+  /* ===== 屏 1：上传 ===== */
+  #screen-upload { gap: 22px; }
+  .title-block { text-align: center; }
+  .title-block h1 { font-size: 30px; font-weight: 700; letter-spacing: .5px; }
+  .title-block p { color: var(--text-dim); margin-top: 8px; font-size: 14px; }
+
+  .drop-zone {
+    width: min(560px, 92vw); height: 260px;
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    background: var(--panel);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; cursor: pointer;
+    transition: border-color .2s, background .2s, transform .15s;
+  }
+  .drop-zone:hover, .drop-zone.drag {
+    border-color: var(--accent);
+    background: #1c2533;
+    transform: translateY(-2px);
+  }
+  .drop-zone .icon { font-size: 44px; line-height: 1; opacity: .8; }
+  .drop-zone .hint { color: var(--text-dim); font-size: 14px; }
+  .drop-zone .formats { color: var(--text-dim); font-size: 12px; opacity: .7; }
+  .drop-zone input { display: none; }
+
+  .upload-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .btn {
+    padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600;
+    background: var(--panel2); color: var(--text);
+    transition: background .15s, transform .1s;
+  }
+  .btn:hover { background: #3d444d; }
+  .btn:active { transform: scale(.97); }
+  .btn.primary { background: var(--accent2); color: #fff; }
+  .btn.primary:hover { background: #1f6feb; }
+  .btn.ghost { background: transparent; border: 1px solid var(--border); }
+
+  /* ===== 屏 2：选数量 ===== */
+  #screen-choose { gap: 18px; }
+  .preview-wrap {
+    width: min(420px, 80vw); max-height: 38vh;
+    border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+  .preview-wrap canvas { display: block; width: 100%; height: 100%; }
+  .choose-title { font-size: 18px; font-weight: 600; }
+  .choose-sub { color: var(--text-dim); font-size: 13px; }
+  .nop-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+    gap: 12px; width: min(680px, 94vw); max-height: 46vh; overflow-y: auto;
+    padding: 4px;
+  }
+  .nop-btn {
+    background: var(--panel); border: 2px solid transparent; border-radius: 10px;
+    padding: 16px 8px; display: flex; flex-direction: column; gap: 4px; align-items: center;
+    transition: border-color .15s, background .15s, transform .1s;
+  }
+  .nop-btn:hover { background: var(--panel2); transform: translateY(-2px); }
+  .nop-btn.sel { border-color: var(--accent); background: #1c2533; }
+  .nop-btn .nop { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .nop-btn .rc { font-size: 12px; color: var(--text-dim); }
+  .choose-actions { display: flex; gap: 12px; }
+
+  /* ===== 屏 3：游戏 ===== */
+  #screen-game { padding: 0; justify-content: flex-start; }
+  #toolbar {
+    width: 100%; height: 52px; flex: 0 0 auto;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px; padding: 0 12px;
+    z-index: 10;
+  }
+  #toolbar .tb-btn {
+    height: 34px; padding: 0 14px; border-radius: 8px;
+    background: var(--panel2); color: var(--text); font-size: 13px; font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: background .15s;
+  }
+  #toolbar .tb-btn:hover { background: #3d444d; }
+  #toolbar .tb-btn.on { background: var(--accent2); color: #fff; }
+  #toolbar .spacer { flex: 1; }
+  #toolbar .stat { color: var(--text-dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+  #toolbar .stat b { color: var(--text); font-weight: 600; }
+
+  #canvas-wrap { flex: 1; position: relative; width: 100%; overflow: hidden; background: var(--bg); }
+  #game-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  /* 浮层提示 */
+  #banner {
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%) translateY(-8px);
+    background: rgba(33,38,45,.94); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 18px; font-size: 14px; font-weight: 500;
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 20;
+    box-shadow: var(--shadow);
+  }
+  #banner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* 完成弹窗 */
+  #complete-overlay {
+    position: absolute; inset: 0; background: rgba(13,17,23,.82);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity .4s; z-index: 30;
+    backdrop-filter: blur(4px);
+  }
+  #complete-overlay.show { opacity: 1; pointer-events: auto; }
+  .complete-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 36px 44px; text-align: center; box-shadow: var(--shadow);
+    transform: scale(.9); transition: transform .4s cubic-bezier(.2,.9,.3,1.3);
+  }
+  #complete-overlay.show .complete-card { transform: scale(1); }
+  .complete-card .emoji { font-size: 56px; line-height: 1; }
+  .complete-card h2 { font-size: 24px; margin: 12px 0 4px; }
+  .complete-card .time { color: var(--accent); font-size: 20px; font-weight: 700; margin: 8px 0; }
+  .complete-card .meta { color: var(--text-dim); font-size: 13px; margin-bottom: 20px; }
+  .complete-card .actions { display: flex; gap: 12px; justify-content: center; }
+
+  /* loading 旋转 */
+  .spinner {
+    width: 28px; height: 28px; border: 3px solid var(--panel2);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 滚动条 */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--panel2); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ==================== 屏 1：上传 ==================== -->
+<section id="screen-upload" class="screen active">
+  <div class="title-block">
+    <h1>🧩 拼图引擎 Demo</h1>
+    <p>上传一张图片，选择拼图块数，开始拼图</p>
+  </div>
+  <div class="drop-zone" id="drop-zone">
+    <div class="icon">📁</div>
+    <div class="hint">点击选择图片，或拖拽到此处</div>
+    <div class="formats">支持 JPG / PNG / WEBP / GIF</div>
+    <input type="file" id="file-input" accept="image/*" />
+  </div>
+  <div class="upload-actions">
+    <button class="btn primary" id="btn-use-sample">使用示例图片</button>
+  </div>
+</section>
+
+<!-- ==================== 屏 2：选数量 ==================== -->
+<section id="screen-choose" class="screen">
+  <div class="preview-wrap"><canvas id="preview-canvas"></canvas></div>
+  <div style="text-align:center">
+    <div class="choose-title">选择拼图块数</div>
+    <div class="choose-sub" id="choose-sub">图片尺寸计算中…</div>
+  </div>
+  <div class="nop-grid" id="nop-grid"></div>
+  <div class="choose-actions">
+    <button class="btn ghost" id="btn-back-upload">← 重新选择图片</button>
+    <button class="btn primary" id="btn-start" disabled>开始拼图</button>
+  </div>
+</section>
+
+<!-- ==================== 屏 3：游戏 ==================== -->
+<section id="screen-game" class="screen">
+  <div id="toolbar">
+    <button class="tb-btn" id="btn-preview" title="显示/隐藏参考图">👁 参考图</button>
+    <button class="tb-btn" id="btn-scatter" title="重新散开未拼合的块">🔀 重新散开</button>
+    <button class="tb-btn" id="btn-pause" title="暂停/继续">⏸ 暂停</button>
+    <div class="spacer"></div>
+    <span class="stat" id="stat-moves">移动 <b>0</b></span>
+    <span class="stat" id="stat-progress">进度 <b>0%</b></span>
+    <span class="stat" id="stat-time">用时 <b>0:00</b></span>
+    <button class="tb-btn ghost" id="btn-new" title="换一张图">✕ 换图</button>
+  </div>
+  <div id="canvas-wrap">
+    <canvas id="game-canvas"></canvas>
+    <div id="banner"></div>
+    <div id="complete-overlay">
+      <div class="complete-card">
+        <div class="emoji">🎉</div>
+        <h2>拼图完成！</h2>
+        <div class="time" id="complete-time">0:00</div>
+        <div class="meta" id="complete-meta"></div>
+        <div class="actions">
+          <button class="btn primary" id="btn-complete-again">再玩一次</button>
+          <button class="btn ghost" id="btn-complete-new">换张图片</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+"use strict";
+/* ============================================================
+ * 0. 常量
+ * ============================================================ */
+const MARGIN = 10;            // 拼块离屏 canvas 边距（给凸耳留空间）
+const HIT_ALPHA = 24;         // 命中测试 alpha 阈值
+const DRAG_THRESHOLD = 3;     // 拖动判定阈值（px）
+const SUBJECT_AREA_RATIO = 0.35; // 源图目标占画布面积比
+const SNAP_FACTOR = 0.28;     // 吸附阈值 = max(18, size × 0.28)
+const SNAP_MIN = 18;
+
+/* ============================================================
+ * 1. Utils —— 工具函数
+ * ============================================================ */
+const Utils = {
+  // 种子化随机数（Mulberry32）—— 同种子同序列，保证切图可复现
+  rng(seed) {
+    let s = (seed >>> 0) || 1;
+    return function () {
+      s = (s + 0x6D2B79F5) | 0;
+      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  },
+  // 2D 向量旋转（弧度制）—— 用于吸附几何与（可选）旋转
+  rotate(x, y, deg) {
+    const r = deg * Math.PI / 180;
+    const c = Math.cos(r), s = Math.sin(r);
+    return { x: x * c - y * s, y: x * s + y * c };
+  },
+  clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; },
+  hypot(x, y) { return Math.sqrt(x * x + y * y); },
+  // 加载 File/Blob 为 HTMLImageElement
+  loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("图片加载失败"));
+      img.src = src;
+    });
+  },
+  // 用时格式化 mm:ss
+  fmtTime(sec) {
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return m + ":" + (s < 10 ? "0" + s : s);
+  },
+};
+
+/* ============================================================
+ * 2. Subject —— 源图缩放（文档 §3.1）
+ *    把任意尺寸图片缩放到「画布面积 ~35%」的离屏 canvas
+ * ============================================================ */
+const Subject = {
+  // 从 HTMLImageElement 生成缩放后的离屏 canvas + 尺寸信息
+  create(img, boardW, boardH) {
+    const boardArea = boardW * boardH;
+    let w = img.naturalWidth, h = img.naturalHeight;
+    // 面积驱动缩放：目标 ≈ 35% 画布面积，且单边 ≤ 90% 画布
+    let scale = 1;
+    while ((w * h) / boardArea > SUBJECT_AREA_RATIO || w > boardW * 0.9 || h > boardH * 0.9) {
+      scale -= 0.01;
+      w = Math.round(img.naturalWidth * scale);
+      h = Math.round(img.naturalHeight * scale);
+      if (scale < 0.05) break; // 兜底
+    }
+    w = Math.max(40, w);
+    h = Math.max(40, h);
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+    return { canvas, width: w, height: h };
+  }
+};
+
+/* ============================================================
+ * 3. Knife —— 切图核心（文档 §3.2）
+ *    生成拼块规格、凸凹互补、贝塞尔曲线、预渲染掩码
+ * ============================================================ */
+const Knife = {
+  // 生成一条边的参数（凸/凹 + 几何）—— 右/下边用
+  edge(span, rng) {
+    return {
+      border: false,
+      tab: rng() >= 0.5,                                    // true=凸 false=凹
+      thick: Math.max(12, Math.round(span * (0.16 + rng() * 0.08))), // 凸耳高度
+      sh: 0.18 + rng() * 0.06,                              // 肩部缩进
+      cr: 0.18 + rng() * 0.06,                              // 颈部半宽
+      pi: 0.05 + rng() * 0.04,                              // 颈部内缩
+    };
+  },
+  // 凸凹取反（邻居互补）—— 左/上边继承自邻居
+  flip(edge) {
+    return { border: false, tab: !edge.tab, thick: edge.thick, sh: edge.sh, cr: edge.cr, pi: edge.pi };
+  },
+
+  // 主切图：三遍扫描生成所有拼块规格
+  // 返回 piece[]，每个 piece 含 core(核心矩形)、edges(四边)、neighbors(邻居)
+  buildPieces(subject, choice, seed) {
+    const rng = Utils.rng(seed);
+    const rows = choice.rows, cols = choice.cols, size = choice.size;
+    const grid = Array.from({ length: rows }, () => Array(cols).fill(null));
+    const list = [];
+
+    // --- 第一遍：网格 + core 尺寸（余数均摊，避免末列/末行变成窄条）---
+    const wRem = subject.width % size;
+    const hRem = subject.height % size;
+    const wChunk = Math.floor(wRem / cols);
+    const hChunk = Math.floor(hRem / rows);
+    let y = 0;
+    for (let row = 0; row < rows; row++) {
+      let h = size;
+      const extraH = hRem - hChunk * row - Math.min(row, hRem % rows);
+      if (extraH > 0) { h += hChunk; if ((hRem % rows) - row > 0) h++; }
+      let x = 0;
+      for (let col = 0; col < cols; col++) {
+        let w = size;
+        const extraW = wRem - wChunk * col - Math.min(col, wRem % cols);
+        if (extraW > 0) { w += wChunk; if ((wRem % cols) - col > 0) w++; }
+        const piece = {
+          id: list.length + 1,
+          row, col,
+          imgX: x, imgY: y,                      // 在源图中的左上角
+          refX: x + w / 2, refY: y + h / 2,      // 核心中心（吸附几何基准）
+          core: { width: w, height: h, x: 0, y: 0 },
+          width: 0, height: 0,                   // 含凸耳+margin 的完整外接
+          x: 0, y: 0,                            // 画布坐标（块中心）
+          z: 0,                                  // 层级
+          angle: 0,
+          isEdge: false,
+          sort: rng(),                           // 散开排序键
+          group: null,                           // 所属拼组
+          hasMoved: false,
+          canvas: null,                          // 预渲染离屏 canvas
+          alpha: null,                           // 命中测试用 alpha 掩码
+          neighbors: [],                         // 4 邻居
+          edges: { top: {}, right: {}, bottom: {}, left: {} }
+        };
+        grid[row][col] = piece;
+        list.push(piece);
+        x += w;
+      }
+      y += h;
+    }
+
+    // --- 第二遍：凸凹分配（左/上继承，右/下新生成）→ 天然互补 ---
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const p = grid[row][col];
+        const top = row === 0, left = col === 0;
+        const right = col === cols - 1, bottom = row === rows - 1;
+        p.edges.top    = top    ? { border: true, tab: false, thick: 0 }
+                                : this.flip(grid[row - 1][col].edges.bottom);
+        p.edges.left   = left   ? { border: true, tab: false, thick: 0 }
+                                : this.flip(grid[row][col - 1].edges.right);
+        p.edges.right  = right  ? { border: true, tab: false, thick: 0 }
+                                : this.edge(p.core.height, rng);
+        p.edges.bottom = bottom ? { border: true, tab: false, thick: 0 }
+                                : this.edge(p.core.width, rng);
+        // 计算含凸耳的外接尺寸
+        p.width  = p.edges.left.thick + p.core.width  + p.edges.right.thick  + MARGIN * 2;
+        p.height = p.edges.top.thick  + p.core.height + p.edges.bottom.thick + MARGIN * 2;
+        p.core.x = p.edges.left.thick + MARGIN;
+        p.core.y = p.edges.top.thick  + MARGIN;
+        p.isEdge = top || left || right || bottom;
+      }
+    }
+
+    // --- 第三遍：建立邻居引用（用于吸附判定）---
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const p = grid[row][col];
+        const nb = [];
+        if (row > 0)        nb.push(grid[row - 1][col]); // 上
+        if (col < cols - 1) nb.push(grid[row][col + 1]); // 右
+        if (row < rows - 1) nb.push(grid[row + 1][col]); // 下
+        if (col > 0)        nb.push(grid[row][col - 1]); // 左
+        p.neighbors = nb;
+      }
+    }
+    return list;
+  },
+
+  // ---- 四条边的贝塞尔曲线绘制（3 段三次贝塞尔拟合凸耳）----
+  topEdge(c, x, y, size, edge) {
+    if (edge.border) { c.lineTo(x + size, y); return; }
+    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi;
+    const ctr = x + size / 2, l = ctr - cr - pi, r = ctr + cr + pi;
+    const d = edge.tab ? -edge.thick : edge.thick; // tab 向上凸
+    c.lineTo(x + sh, y);
+    c.bezierCurveTo(x + size * 0.28, y, l - size * 0.04, y + d * 0.36, l, y + d * 0.56);
+    c.bezierCurveTo(ctr - cr * 0.48, y + d, ctr + cr * 0.48, y + d, r, y + d * 0.56);
+    c.bezierCurveTo(r + size * 0.04, y + d * 0.36, x + size * 0.72, y, x + size - sh, y);
+    c.lineTo(x + size, y);
+  },
+  rightEdge(c, x, y, size, edge) {
+    if (edge.border) { c.lineTo(x, y + size); return; }
+    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi;
+    const ctr = y + size / 2, t = ctr - cr - pi, b = ctr + cr + pi;
+    const d = edge.tab ? edge.thick : -edge.thick; // tab 向右凸
+    c.lineTo(x, y + sh);
+    c.bezierCurveTo(x, y + size * 0.28, x + d * 0.36, t - size * 0.04, x + d * 0.56, t);
+    c.bezierCurveTo(x + d, ctr - cr * 0.48, x + d, ctr + cr * 0.48, x + d * 0.56, b);
+    c.bezierCurveTo(x + d * 0.36, b + size * 0.04, x, y + size * 0.72, x, y + size - sh);
+    c.lineTo(x, y + size);
+  },
+  bottomEdge(c, x, y, size, edge) {
+    if (edge.border) { c.lineTo(x - size, y); return; }
+    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi;
+    const ctr = x - size / 2, l = ctr - cr - pi, r = ctr + cr + pi;
+    const d = edge.tab ? edge.thick : -edge.thick; // tab 向下凸
+    c.lineTo(x - sh, y);
+    c.bezierCurveTo(x - size * 0.28, y, r + size * 0.04, y + d * 0.36, r, y + d * 0.56);
+    c.bezierCurveTo(ctr + cr * 0.48, y + d, ctr - cr * 0.48, y + d, l, y + d * 0.56);
+    c.bezierCurveTo(l - size * 0.04, y + d * 0.36, x - size * 0.72, y, x - size + sh, y);
+    c.lineTo(x - size, y);
+  },
+  leftEdge(c, x, y, size, edge) {
+    if (edge.border) { c.lineTo(x, y - size); return; }
+    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi;
+    const ctr = y - size / 2, t = ctr - cr - pi, b = ctr + cr + pi;
+    const d = edge.tab ? -edge.thick : edge.thick; // tab 向左凸
+    c.lineTo(x, y - sh);
+    c.bezierCurveTo(x, y - size * 0.28, x + d * 0.36, b + size * 0.04, x + d * 0.56, b);
+    c.bezierCurveTo(x + d, ctr + cr * 0.48, x + d, ctr - cr * 0.48, x + d * 0.56, t);
+    c.bezierCurveTo(x + d * 0.36, t - size * 0.04, x, y - size * 0.72, x, y - size + sh);
+    c.lineTo(x, y - size);
+  },
+
+  // 绘制完整轮廓（闭合路径）
+  outline(c, piece) {
+    const x = piece.core.x, y = piece.core.y, w = piece.core.width, h = piece.core.height;
+    c.beginPath();
+    c.moveTo(x, y);
+    this.topEdge(c, x, y, w, piece.edges.top);
+    this.rightEdge(c, x + w, y, h, piece.edges.right);
+    this.bottomEdge(c, x + w, y + h, w, piece.edges.bottom);
+    this.leftEdge(c, x, y + h, h, piece.edges.left);
+    c.closePath();
+  },
+
+  // 预渲染单块到离屏 canvas（文档 §3.3 避坑#5）
+  // clip + drawImage + 光泽 + 双层描边 + 缓存 alpha 掩码
+  paintPiece(piece, subCanvas) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(piece.width);
+    canvas.height = Math.ceil(piece.height);
+    const g = canvas.getContext("2d");
+    this.outline(g, piece);
+    g.save();
+    g.clip();
+    // 把源图对应区域画进来（偏移让 core 对齐源图位置）
+    g.drawImage(subCanvas, piece.core.x - piece.imgX, piece.core.y - piece.imgY);
+    // 顶部光泽渐变（立体感）
+    const gloss = g.createLinearGradient(0, 0, 0, canvas.height);
+    gloss.addColorStop(0, "rgba(255,255,255,.20)");
+    gloss.addColorStop(0.55, "rgba(255,255,255,.04)");
+    gloss.addColorStop(1, "rgba(17,32,47,.08)");
+    g.fillStyle = gloss;
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.restore();
+    // 暗描边（底）+ 亮描边（顶）= 斜面效果
+    this.outline(g, piece);
+    g.lineWidth = 1.4; g.strokeStyle = "rgba(10,18,28,.6)"; g.stroke();
+    this.outline(g, piece);
+    g.lineWidth = 0.8; g.strokeStyle = "rgba(255,255,255,.4)"; g.stroke();
+    piece.canvas = canvas;
+    piece.alpha = g.getImageData(0, 0, canvas.width, canvas.height).data;
+  },
+
+  // 渲染尺寸（旋转 90/270 时宽高互换）—— 首版无旋转，但保留接口
+  renderSize(piece) {
+    return piece.angle % 180 === 0
+      ? { w: piece.width, h: piece.height }
+      : { w: piece.height, h: piece.width };
+  },
+  // 单块外接框（以「核心中心」piece.x/y 为锚点，与 render 一致）
+  // render: drawImage(canvas, -ccx, -ccy) → canvas 左上角世界坐标 = piece.x - ccx
+  // 核心中心在 canvas 内的坐标 ccx = core.x + core.w/2
+  bounds(piece) {
+    const s = this.renderSize(piece);
+    const ccx = piece.core.x + piece.core.width / 2;   // 核心中心在 canvas 的 x
+    const ccy = piece.core.y + piece.core.height / 2;   // 核心中心在 canvas 的 y
+    return { x: piece.x - ccx, y: piece.y - ccy, w: s.w, h: s.h };
+  },
+  // 组外接框
+  groupBounds(pieces) {
+    let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+    for (const p of pieces) {
+      const b = this.bounds(p);
+      if (b.x < minX) minX = b.x;
+      if (b.y < minY) minY = b.y;
+      if (b.x + b.w > maxX) maxX = b.x + b.w;
+      if (b.y + b.h > maxY) maxY = b.y + b.h;
+    }
+    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+  },
+};
+
+/* ============================================================
+ * 4. Group —— 拼组（文档 §3.5.2）
+ *    若干已拼合的块，整组移动/吸附
+ * ============================================================ */
+let _groupSeq = 0;
+class Group {
+  constructor(pieces) {
+    this.id = ++_groupSeq;
+    this.pieces = pieces.slice();
+    for (const p of this.pieces) p.group = this;
+  }
+  // 把另一组吸收进来
+  absorb(other) {
+    for (const p of other.pieces) {
+      if (this.pieces.indexOf(p) === -1) this.pieces.push(p);
+      p.group = this;
+    }
+    return this;
+  }
+}
+
+/* ============================================================
+ * 5. Puzzle —— 拼图主控（文档 §3.4/§3.5）
+ * ============================================================ */
+class Puzzle {
+  constructor(ctx, boardW, boardH) {
+    this.ctx = ctx;
+    this.W = boardW; this.H = boardH;
+    this.pieces = [];
+    this.choice = null;
+    this.subject = null;
+    this.subCanvas = null;
+    this.zCounter = 0;
+    this.drag = null;
+    this.moves = 0;
+    this.complete = false;
+    this.showPreview = true;
+    this.previewAlpha = 0.18;
+    this.onComplete = null;     // 完成回调
+    this.onProgress = null;     // 进度回调
+    this.snapDistance = SNAP_MIN;
+  }
+
+  // 初始化：切图 + 预渲染 + 散开
+  init(subject, choice, seed) {
+    this.subject = subject;
+    this.choice = choice;
+    this.subCanvas = subject.canvas;
+    this.pieces = Knife.buildPieces(subject, choice, seed);
+    // 预渲染每块
+    for (const p of this.pieces) Knife.paintPiece(p, this.subCanvas);
+    // 初始吸附距离（自适应块尺寸）
+    this.snapDistance = Math.max(SNAP_MIN, Math.round(choice.size * SNAP_FACTOR));
+    // 每块先各自成组
+    for (const p of this.pieces) p.group = new Group([p]);
+    // 散开
+    this.scatter();
+    this.complete = false;
+    this.moves = 0;
+  }
+
+  // ---- 散开：螺旋铺放，避开中央参考图区（文档 §3.5.4）----
+  scatter() {
+    // 先把所有拼块拆回单块组（否则散开后旧的 group 引用还在，
+    // 拖一块会牵动整个旧组——尤其完成后重新散开的场景）
+    for (const p of this.pieces) {
+      if (!p.group || p.group.pieces.length !== 1) p.group = new Group([p]);
+    }
+    // 计算中央参考图区域（避开）
+    const cx = this.W / 2, cy = this.H / 2;
+    const sw = this.subject.width, sh = this.subject.height;
+    const reserve = { x: cx - sw / 2 - 24, y: cy - sh / 2 - 24, w: sw + 48, h: sh + 48 };
+
+    // 平均块渲染尺寸
+    let avgW = 0, avgH = 0;
+    for (const p of this.pieces) { avgW += p.width; avgH += p.height; }
+    avgW = avgW / this.pieces.length * 1.06;
+    avgH = avgH / this.pieces.length * 1.06;
+
+    // 螺旋单元格大小
+    const cellW = avgW, cellH = avgH;
+    // 计算外围可铺的行列数
+    const cols = Math.floor((this.W - 24) / cellW);
+    const rows = Math.floor((this.H - 24) / cellH);
+    const startX = (this.W - cols * cellW) / 2 + cellW / 2;
+    const startY = (this.H - rows * cellH) / 2 + cellH / 2;
+
+    // 生成所有单元格坐标，按螺旋顺序排列
+    const cells = [];
+    const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
+    // 螺旋方向：右0 下1 左2 上3
+    let r = 0, c = 0, dir = 0;
+    const dr = [0, 1, 0, -1], dc = [1, 0, -1, 0];
+    for (let i = 0; i < rows * cols; i++) {
+      cells.push({ r, c });
+      visited[r][c] = true;
+      const nr = r + dr[dir], nc = c + dc[dir];
+      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols || visited[nr][nc]) {
+        dir = (dir + 1) % 4;
+      }
+      r += dr[dir]; c += dc[dir];
+    }
+
+    // 按 sort 错位排序（相邻块尽量不挨着放）
+    const sorted = this.pieces.slice().sort((a, b) => a.sort - b.sort);
+    // 错位：把后半插入前半
+    const reordered = [];
+    const half = Math.ceil(sorted.length / 2);
+    for (let i = 0; i < half; i++) {
+      reordered.push(sorted[i]);
+      if (i + half < sorted.length) reordered.push(sorted[i + half]);
+    }
+
+    // 逐块放置到单元格，跳过与参考图区重叠的格
+    let cellIdx = 0;
+    for (const p of reordered) {
+      let placed = false;
+      while (cellIdx < cells.length) {
+        const cell = cells[cellIdx++];
+        const px = startX + cell.c * cellW;
+        const py = startY + cell.r * cellH;
+        // 检查是否与参考图区重叠
+        const b = Knife.bounds(p);
+        if (px + b.w / 2 > reserve.x && px - b.w / 2 < reserve.x + reserve.w &&
+            py + b.h / 2 > reserve.y && py - b.h / 2 < reserve.y + reserve.h) {
+          continue; // 重叠，跳过此格
+        }
+        // 加抖动
+        const jx = (Math.random() - 0.5) * cellW * 0.16;
+        const jy = (Math.random() - 0.5) * cellH * 0.16;
+        p.x = Utils.clamp(px + jx, b.w / 2 + 12, this.W - b.w / 2 - 12);
+        p.y = Utils.clamp(py + jy, b.h / 2 + 12, this.H - b.h / 2 - 12);
+        p.hasMoved = false;
+        p.z = ++this.zCounter;
+        placed = true;
+        break;
+      }
+      if (!placed) {
+        // 兜底：随机放
+        p.x = Utils.clamp(Math.random() * this.W, p.width / 2 + 12, this.W - p.width / 2 - 12);
+        p.y = Utils.clamp(Math.random() * this.H, p.height / 2 + 12, this.H - p.height / 2 - 12);
+        p.z = ++this.zCounter;
+      }
+    }
+  }
+
+  // ---- 命中测试：alpha 掩码精确判定（文档 §3.4）----
+  hitPiece(point, piece) {
+    const b = Knife.bounds(piece);
+    if (point.x < b.x || point.x > b.x + b.w || point.y < b.y || point.y > b.y + b.h) return false;
+    // 转到块的本地坐标（无旋转时 angle=0）
+    const lx = Math.floor(point.x - b.x);
+    const ly = Math.floor(point.y - b.y);
+    if (lx < 0 || ly < 0 || lx >= piece.canvas.width || ly >= piece.canvas.height) return false;
+    return piece.alpha[(ly * piece.canvas.width + lx) * 4 + 3] > HIT_ALPHA;
+  }
+
+  // 拾取：倒序 z（顶层优先）
+  pick(point) {
+    const sorted = this.pieces.slice().sort((a, b) => b.z - a.z);
+    for (const p of sorted) {
+      if (this.hitPiece(point, p)) return p;
+    }
+    return null;
+  }
+
+  // 置顶组
+  raiseGroup(group) {
+    let z = (++this.zCounter) * 10;
+    for (const p of group.pieces) p.z = z++;
+  }
+
+  // 整组平移（修复 new/engine 组拖拽断开 bug）
+  // clamp=true 时约束在画布内（拖拽用）；clamp=false 时跳过（吸附用，否则会破坏对齐）
+  translateGroup(group, dx, dy, clamp = true) {
+    for (const p of group.pieces) { p.x += dx; p.y += dy; }
+    if (clamp) this.keepInBounds(group);
+  }
+
+  // 约束组在画布内
+  keepInBounds(group) {
+    const b = Knife.groupBounds(group.pieces);
+    let dx = 0, dy = 0;
+    if (b.x < 12) dx = 12 - b.x;
+    if (b.x + b.w > this.W - 12) dx = (this.W - 12) - (b.x + b.w);
+    if (b.y < 12) dy = 12 - b.y;
+    if (b.y + b.h > this.H - 12) dy = (this.H - 12) - (b.y + b.h);
+    if (dx || dy) for (const p of group.pieces) { p.x += dx; p.y += dy; }
+  }
+
+  // ---- 吸附几何（文档 §3.5.1）----
+  // 理论偏移 = rotate(refΔ, angle)；误差 = |理论 − 实际|
+  findSnap(group) {
+    let best = null;
+    for (const piece of group.pieces) {
+      for (const other of piece.neighbors) {
+        if (!other || other.group === group) continue;
+        if (piece.angle !== other.angle) continue;
+        const expected = Utils.rotate(piece.refX - other.refX, piece.refY - other.refY, piece.angle);
+        const dx = expected.x - (piece.x - other.x);
+        const dy = expected.y - (piece.y - other.y);
+        const err = Utils.hypot(dx, dy);
+        if (err <= this.snapDistance && (!best || err < best.err)) {
+          best = { piece, other, dx, dy, err };
+        }
+      }
+    }
+    return best;
+  }
+
+  // ---- 拼合：循环吸附 + 合并组 + 完成检测（文档 §3.5.2/§3.6）----
+  snapGroup(group) {
+    let active = group;
+    let joins = 0;
+    while (true) {
+      const snap = this.findSnap(active);
+      if (!snap) break;
+      // 吸附平移不做边界约束——keepInBounds 会破坏精确对齐造成间隙
+      this.translateGroup(active, snap.dx, snap.dy, false);
+      // 合并两个组（大的吸收小的）
+      const og = snap.other.group;
+      if (active.pieces.length >= og.pieces.length) active.absorb(og);
+      else { og.absorb(active); active = og; }
+      this.raiseGroup(active);
+      for (const p of active.pieces) p.hasMoved = true;
+      joins++;
+    }
+    if (joins && this.onProgress) this.onProgress(this.percent());
+    // 完成检测：最大组 === 总数
+    if (!this.complete && active.pieces.length === this.pieces.length) {
+      this.complete = true;
+      if (this.onComplete) this.onComplete();
+    }
+    return active;
+  }
+
+  // 完成百分比
+  percent() {
+    if (this.complete) return 100;
+    let max = 0;
+    const groups = new Map();
+    for (const p of this.pieces) {
+      const g = p.group;
+      if (!g) continue;
+      const n = (groups.get(g) || 0) + 1;
+      groups.set(g, n);
+      if (n > max) max = n;
+    }
+    return this.pieces.length ? Math.round((max - 1) / (this.pieces.length - 1) * 99) : 0;
+  }
+
+  // ---- 交互：拖拽（整组移动）----
+  pointerDown(point) {
+    if (this.complete) return false;
+    const piece = this.pick(point);
+    if (!piece) return false;
+    this.raiseGroup(piece.group);
+    this.drag = {
+      piece, group: piece.group,
+      offsetX: point.x - piece.x, offsetY: point.y - piece.y,
+      startX: point.x, startY: point.y, moved: false,
+    };
+    return true;
+  }
+  pointerMove(point) {
+    if (!this.drag) return false;
+    const d = this.drag;
+    const tx = point.x - d.offsetX, ty = point.y - d.offsetY;
+    const dx = tx - d.piece.x, dy = ty - d.piece.y;
+    if (dx || dy) this.translateGroup(d.group, dx, dy);
+    if (Utils.hypot(point.x - d.startX, point.y - d.startY) > DRAG_THRESHOLD) d.moved = true;
+    return true;
+  }
+  pointerUp() {
+    if (!this.drag) return false;
+    const d = this.drag;
+    this.drag = null;
+    if (d.moved) {
+      this.moves++;
+      this.snapGroup(d.group);
+    }
+    return true;
+  }
+
+  // ---- 渲染 ----
+  render() {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.W, this.H);
+
+    // 中央参考图（半透明）
+    if (this.showPreview && this.subCanvas) {
+      const cx = this.W / 2, cy = this.H / 2;
+      const sw = this.subject.width, sh = this.subject.height;
+      ctx.save();
+      ctx.globalAlpha = this.previewAlpha;
+      ctx.drawImage(this.subCanvas, cx - sw / 2, cy - sh / 2);
+      ctx.restore();
+      // 参考图边框
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,.12)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - sw / 2, cy - sh / 2, sw, sh);
+      ctx.restore();
+    }
+
+    // 按 z 升序绘制（底层先画）
+    const sorted = this.pieces.slice().sort((a, b) => a.z - b.z);
+    const dragging = this.drag;
+    for (const p of sorted) {
+      const isSelected = dragging && dragging.group.pieces.indexOf(p) !== -1;
+      ctx.save();
+      // 拖动中的组加阴影
+      if (isSelected) {
+        ctx.shadowColor = "rgba(0,0,0,.5)";
+        ctx.shadowBlur = 16;
+        ctx.shadowOffsetY = 6;
+      } else {
+        ctx.shadowColor = "rgba(0,0,0,.35)";
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetY = 2;
+      }
+      ctx.translate(p.x, p.y);
+      if (p.angle) ctx.rotate(p.angle * Math.PI / 180);
+      // 关键：让「核心中心」对齐 piece.x/y（与吸附基准 refX/refY 一致）
+      // canvas 中核心中心位于 (core.x + core.w/2, core.y + core.h/2)，
+      // drawImage 的偏移 = 负的核心中心坐标（让该点落在 translate 原点）
+      ctx.drawImage(
+        p.canvas,
+        -(p.core.x + p.core.width / 2),
+        -(p.core.y + p.core.height / 2)
+      );
+      ctx.restore();
+    }
+  }
+}
+
+/* ============================================================
+ * 6. App —— 三屏状态机 + 事件 + 计时
+ * ============================================================ */
+const App = {
+  // DOM
+  el: {},
+  // 状态
+  state: "upload",       // upload | choose | game
+  imgFile: null,         // 当前图片 Image 对象
+  imgName: "",
+  subject: null,         // {canvas,width,height}
+  choices: [],           // 可选档位
+  selectedChoice: null,
+  puzzle: null,
+  canvas: null,
+  ctx: null,
+  boardW: 0, boardH: 0,
+  dpr: 1,
+  // 计时
+  timerStart: 0,
+  timerLocked: 0,
+  timerRunning: false,
+  timerInterval: null,
+  paused: false,
+  // 拖拽坐标换算
+  pointerId: null,
+
+  init() {
+    this.cacheEl();
+    this.bindUpload();
+    this.bindChoose();
+    this.bindGame();
+    this.bindComplete();
+  },
+
+  cacheEl() {
+    const $ = (id) => document.getElementById(id);
+    this.el = {
+      screenUpload: $("screen-upload"),
+      screenChoose: $("screen-choose"),
+      screenGame: $("screen-game"),
+      dropZone: $("drop-zone"),
+      fileInput: $("file-input"),
+      btnSample: $("btn-use-sample"),
+      previewCanvas: $("preview-canvas"),
+      chooseSub: $("choose-sub"),
+      nopGrid: $("nop-grid"),
+      btnBackUpload: $("btn-back-upload"),
+      btnStart: $("btn-start"),
+      toolbar: $("toolbar"),
+      btnPreview: $("btn-preview"),
+      btnScatter: $("btn-scatter"),
+      btnPause: $("btn-pause"),
+      btnNew: $("btn-new"),
+      statMoves: $("stat-moves"),
+      statProgress: $("stat-progress"),
+      statTime: $("stat-time"),
+      canvas: $("game-canvas"),
+      banner: $("banner"),
+      completeOverlay: $("complete-overlay"),
+      completeTime: $("complete-time"),
+      completeMeta: $("complete-meta"),
+      btnAgain: $("btn-complete-again"),
+      btnCompleteNew: $("btn-complete-new"),
+    };
+    this.canvas = this.el.canvas;
+    this.ctx = this.canvas.getContext("2d");
+  },
+
+  // ---- 屏切换 ----
+  showScreen(name) {
+    this.state = name;
+    this.el.screenUpload.classList.toggle("active", name === "upload");
+    this.el.screenChoose.classList.toggle("active", name === "choose");
+    this.el.screenGame.classList.toggle("active", name === "game");
+  },
+
+  // ==================== 屏 1：上传 ====================
+  bindUpload() {
+    const dz = this.el.dropZone;
+    dz.addEventListener("click", () => this.el.fileInput.click());
+    this.el.fileInput.addEventListener("change", (e) => {
+      const f = e.target.files[0];
+      if (f) this.handleFile(f);
+      e.target.value = "";
+    });
+    // 拖拽
+    ["dragenter", "dragover"].forEach(ev =>
+      dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("drag"); }));
+    ["dragleave", "drop"].forEach(ev =>
+      dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove("drag"); }));
+    dz.addEventListener("drop", (e) => {
+      const f = e.dataTransfer.files[0];
+      if (f && f.type.startsWith("image/")) this.handleFile(f);
+      else this.banner("请拖入图片文件");
+    });
+    // 示例图（程序生成渐变图，免网络）
+    this.el.btnSample.addEventListener("click", async () => {
+      this.banner("正在生成示例图…", 800);
+      const img = await this.makeSampleImage();
+      this.acceptImage(img, "示例图片");
+    });
+  },
+
+  async handleFile(file) {
+    this.banner("正在读取图片…", 1500);
+    try {
+      const url = URL.createObjectURL(file);
+      const img = await Utils.loadImage(url);
+      URL.revokeObjectURL(url);
+      this.acceptImage(img, file.name);
+    } catch (e) {
+      this.banner("图片读取失败");
+    }
+  },
+
+  acceptImage(img, name) {
+    this.imgFile = img;
+    this.imgName = name;
+    // 用游戏画布尺寸算 subject（先估算板尺寸）
+    this.computeBoardSize();
+    this.subject = Subject.create(img, this.boardW, this.boardH);
+    this.drawPreview();
+    this.choices = this.computeChoices();
+    this.renderChoices();
+    this.selectedChoice = null;
+    this.el.btnStart.disabled = true;
+    this.el.chooseSub.textContent =
+      `${img.naturalWidth} × ${img.naturalHeight} → 拼图区 ${this.subject.width} × ${this.subject.height}`;
+    this.showScreen("choose");
+  },
+
+  // 生成一张程序化示例图（四象限渐变 + 几何，免外网）
+  async makeSampleImage() {
+    const W = 800, H = 600;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    // 背景渐变
+    const bg = g.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, "#667eea"); bg.addColorStop(0.5, "#764ba2"); bg.addColorStop(1, "#f093fb");
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    // 装饰圆
+    const colors = ["#ffd93d", "#6bcB77", "#4d96ff", "#ff6b6b", "#fff"];
+    for (let i = 0; i < 18; i++) {
+      g.fillStyle = colors[i % colors.length];
+      g.globalAlpha = 0.5 + Math.random() * 0.4;
+      g.beginPath();
+      g.arc(Math.random() * W, Math.random() * H, 20 + Math.random() * 70, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+    // 标题
+    g.fillStyle = "#fff";
+    g.font = "bold 56px sans-serif";
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText("🧩 拼图示例", W / 2, H / 2);
+    // 必须等 Image 解码完成，否则后续 drawImage 会画到空白
+    return await Utils.loadImage(c.toDataURL("image/png"));
+  },
+
+  // ==================== 屏 2：选数量 ====================
+  drawPreview() {
+    const c = this.el.previewCanvas;
+    const maxW = 420, maxH = 280;
+    const ratio = Math.min(maxW / this.subject.width, maxH / this.subject.height, 1);
+    c.width = this.subject.width * ratio;
+    c.height = this.subject.height * ratio;
+    c.getContext("2d").drawImage(this.subject.canvas, 0, 0, c.width, c.height);
+  },
+
+  // 计算可选档位（文档 §3.2.1 cutChoices）
+  // 从 min(w,h)/3 起步，逐步缩小边长，每档 nop≥6
+  computeChoices() {
+    const w = this.subject.width, h = this.subject.height;
+    const result = [];
+    const seen = new Set();
+    // 从「块边长 ≈ min(w,h)/3」起步，逐步缩小边长收集档位
+    // 收敛方式：每次把目标行数+1、列数+1，取新边长 = max(两者反算) 的较小者
+    let size = Math.floor(Math.min(w, h) / 3);
+    let lastSize = Infinity;
+    let guard = 0;
+    while (size > 24 && size < lastSize && guard < 60) {
+      guard++;
+      lastSize = size;
+      const rows = Math.max(2, Math.floor(h / size));
+      const cols = Math.max(2, Math.floor(w / size));
+      const nop = rows * cols;
+      if (nop >= 6 && !seen.has(nop)) {
+        seen.add(nop);
+        result.push({ nop, rows, cols, size });
+      }
+      // 下一步：同时增行增列，取反算边长的较大者作为新 size（保证单调递减）
+      const sR = Math.floor(h / (rows + 1));
+      const sC = Math.floor(w / (cols + 1));
+      size = Math.max(sR, sC);
+      if (result.length >= 8) break;
+    }
+    // 从小到大排序
+    result.sort((a, b) => a.nop - b.nop);
+    return result;
+  },
+
+  renderChoices() {
+    const grid = this.el.nopGrid;
+    grid.innerHTML = "";
+    for (const ch of this.choices) {
+      const btn = document.createElement("button");
+      btn.className = "nop-btn";
+      btn.innerHTML = `<span class="nop">${ch.nop}</span><span class="rc">${ch.rows} × ${ch.cols}</span>`;
+      btn.addEventListener("click", () => {
+        this.selectedChoice = ch;
+        this.el.nopGrid.querySelectorAll(".nop-btn").forEach(b => b.classList.remove("sel"));
+        btn.classList.add("sel");
+        this.el.btnStart.disabled = false;
+      });
+      grid.appendChild(btn);
+    }
+  },
+
+  bindChoose() {
+    this.el.btnBackUpload.addEventListener("click", () => this.showScreen("upload"));
+    this.el.btnStart.addEventListener("click", () => this.startGame());
+  },
+
+  // ==================== 屏 3：游戏 ====================
+  // 计算游戏画布逻辑尺寸（响应窗口）
+  computeBoardSize() {
+    const wrap = this.el.canvas.parentElement;
+    const rect = wrap.getBoundingClientRect();
+    // 首次时 wrap 可能未显示（屏3未激活），用窗口兜底
+    let w = rect.width || (window.innerWidth - 0);
+    let h = rect.height || (window.innerHeight - 52);
+    this.boardW = Math.max(320, Math.floor(w));
+    this.boardH = Math.max(240, Math.floor(h));
+  },
+
+  startGame() {
+    if (!this.selectedChoice) return;
+    this.showScreen("game");
+    // 等一帧让屏3布局生效，再测尺寸
+    requestAnimationFrame(() => {
+      this.computeBoardSize();
+      this.resizeCanvas();
+      // 用最终板尺寸重建 subject（保证比例正确）
+      this.subject = Subject.create(this.imgFile, this.boardW, this.boardH);
+      // 重建档位 size（基于新 subject）
+      const ch = this.selectedChoice;
+      const newSize = Math.floor(Math.min(this.subject.width / ch.cols, this.subject.height / ch.rows));
+      this.selectedChoice = { ...ch, size: newSize };
+      // 创建拼图
+      this.puzzle = new Puzzle(this.ctx, this.boardW, this.boardH);
+      this.puzzle.onComplete = () => this.onPuzzleComplete();
+      this.puzzle.onProgress = (pct) => this.updateStats(pct);
+      const seed = (Math.random() * 1e9) | 0;
+      this.puzzle.init(this.subject, this.selectedChoice, seed);
+      this.updateStats(0);
+      this.startTimer();
+      this.renderLoop();
+      this.banner(`${this.selectedChoice.nop} 块拼图已就绪，开始吧！`, 2000);
+    });
+  },
+
+  resizeCanvas() {
+    this.dpr = window.devicePixelRatio || 1;
+    this.canvas.width = this.boardW * this.dpr;
+    this.canvas.height = this.boardH * this.dpr;
+    this.canvas.style.width = this.boardW + "px";
+    this.canvas.style.height = this.boardH + "px";
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = "high";
+  },
+
+  bindGame() {
+    // pointer 事件统一处理鼠标+触摸
+    const c = this.canvas;
+    const getPoint = (e) => {
+      const r = c.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    c.addEventListener("pointerdown", (e) => {
+      if (!this.puzzle || this.paused) return;
+      c.setPointerCapture(e.pointerId);
+      this.pointerId = e.pointerId;
+      this.puzzle.pointerDown(getPoint(e));
+    });
+    c.addEventListener("pointermove", (e) => {
+      if (!this.puzzle || this.paused) return;
+      if (this.pointerId !== null && e.pointerId !== this.pointerId) return;
+      this.puzzle.pointerMove(getPoint(e));
+    });
+    const end = (e) => {
+      if (!this.puzzle) return;
+      this.pointerId = null;
+      this.puzzle.pointerUp();
+    };
+    c.addEventListener("pointerup", end);
+    c.addEventListener("pointercancel", end);
+    // 防止触摸滚动
+    c.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
+    c.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
+    // 工具栏
+    this.el.btnPreview.addEventListener("click", () => {
+      if (!this.puzzle) return;
+      this.puzzle.showPreview = !this.puzzle.showPreview;
+      this.el.btnPreview.classList.toggle("on", this.puzzle.showPreview);
+    });
+    this.el.btnScatter.addEventListener("click", () => {
+      if (!this.puzzle || this.puzzle.complete) return;
+      // 只散开未完成的块（拆散所有非最大组）
+      this.puzzle.scatter();
+      this.banner("已重新散开", 1200);
+    });
+    this.el.btnPause.addEventListener("click", () => this.togglePause());
+    this.el.btnNew.addEventListener("click", () => {
+      this.stopTimer();
+      this.showScreen("upload");
+    });
+
+    // 窗口缩放
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      if (this.state !== "game" || !this.puzzle) return;
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        this.computeBoardSize();
+        this.resizeCanvas();
+        // 简单处理：约束已有块在新边界内
+        for (const g of this.uniqueGroups()) this.puzzle.keepInBounds(g);
+      }, 200);
+    });
+  },
+
+  uniqueGroups() {
+    const set = new Set();
+    for (const p of this.puzzle.pieces) if (p.group) set.add(p.group);
+    return set;
+  },
+
+  renderLoop() {
+    if (this.state !== "game" || !this.puzzle) return;
+    this.puzzle.render();
+    requestAnimationFrame(() => this.renderLoop());
+  },
+
+  // ---- 计时 ----
+  startTimer() {
+    this.timerStart = performance.now();
+    this.timerLocked = 0;
+    this.timerRunning = true;
+    this.paused = false;
+    this.el.btnPause.textContent = "⏸ 暂停";
+    if (this.timerInterval) clearInterval(this.timerInterval);
+    this.timerInterval = setInterval(() => this.updateClock(), 500);
+  },
+  stopTimer() {
+    this.timerRunning = false;
+    if (this.timerInterval) { clearInterval(this.timerInterval); this.timerInterval = null; }
+  },
+  togglePause() {
+    if (!this.puzzle || this.puzzle.complete) return;
+    if (this.paused) {
+      this.paused = false;
+      this.timerStart = performance.now();
+      this.el.btnPause.textContent = "⏸ 暂停";
+      this.banner("继续", 800);
+    } else {
+      this.paused = true;
+      this.timerLocked += performance.now() - this.timerStart;
+      this.el.btnPause.textContent = "▶ 继续";
+      this.banner("已暂停", 1000);
+    }
+  },
+  elapsedSec() {
+    if (!this.timerRunning) return Math.round(this.timerLocked / 1000);
+    if (this.paused) return Math.round(this.timerLocked / 1000);
+    return Math.round((this.timerLocked + (performance.now() - this.timerStart)) / 1000);
+  },
+  updateClock() {
+    this.el.statTime.innerHTML = "用时 <b>" + Utils.fmtTime(this.elapsedSec()) + "</b>";
+  },
+  updateStats(pct) {
+    this.el.statMoves.innerHTML = "移动 <b>" + (this.puzzle ? this.puzzle.moves : 0) + "</b>";
+    this.el.statProgress.innerHTML = "进度 <b>" + (pct != null ? pct : (this.puzzle ? this.puzzle.percent() : 0)) + "%</b>";
+    this.updateClock();
+  },
+
+  // ---- 完成 ----
+  onPuzzleComplete() {
+    this.stopTimer();
+    const sec = this.elapsedSec();
+    this.el.completeTime.textContent = Utils.fmtTime(sec);
+    this.el.completeMeta.textContent =
+      `${this.selectedChoice.nop} 块 · ${this.selectedChoice.rows}×${this.selectedChoice.cols} · ${this.puzzle.moves} 步`;
+    this.el.completeOverlay.classList.add("show");
+    this.updateStats(100);
+  },
+
+  bindComplete() {
+    this.el.btnAgain.addEventListener("click", () => {
+      this.el.completeOverlay.classList.remove("show");
+      // 同图同档重新玩
+      this.subject = Subject.create(this.imgFile, this.boardW, this.boardH);
+      const ch = this.choices.find(c => c.nop === this.selectedChoice.nop) || this.choices[0];
+      const newSize = Math.floor(Math.min(this.subject.width / ch.cols, this.subject.height / ch.rows));
+      this.selectedChoice = { ...ch, size: newSize };
+      this.puzzle = new Puzzle(this.ctx, this.boardW, this.boardH);
+      this.puzzle.onComplete = () => this.onPuzzleComplete();
+      this.puzzle.onProgress = (p) => this.updateStats(p);
+      this.puzzle.init(this.subject, this.selectedChoice, (Math.random() * 1e9) | 0);
+      this.el.btnPreview.classList.add("on");
+      this.updateStats(0);
+      this.startTimer();
+      this.renderLoop();
+      this.banner("新的一局开始！", 1500);
+    });
+    this.el.btnCompleteNew.addEventListener("click", () => {
+      this.el.completeOverlay.classList.remove("show");
+      this.showScreen("upload");
+    });
+  },
+
+  // ---- 浮层提示 ----
+  banner(text, ms) {
+    const b = this.el.banner;
+    b.textContent = text;
+    b.classList.add("show");
+    clearTimeout(this._bannerTimer);
+    if (ms) this._bannerTimer = setTimeout(() => b.classList.remove("show"), ms);
+  },
+};
+
+// 启动
+App.init();
+</script>
+</body>
+</html>
