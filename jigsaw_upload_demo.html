@@ -176,6 +176,38 @@
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--panel2); border-radius: 4px; }
+
+  /* ===== Debug 面板 ===== */
+  #debug-panel {
+    position: absolute; top: 12px; right: 12px;
+    width: 320px; max-height: calc(100% - 24px);
+    background: rgba(13,17,23,.92); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 11px; line-height: 1.5; color: var(--text-dim);
+    overflow-y: auto; z-index: 25; box-shadow: var(--shadow);
+    display: none;
+  }
+  #debug-panel.show { display: block; }
+  #debug-panel h4 {
+    font-size: 12px; color: var(--accent); font-weight: 600;
+    margin: 0 0 6px; text-transform: uppercase; letter-spacing: .5px;
+  }
+  #debug-panel .dbg-row { display: flex; justify-content: space-between; gap: 8px; }
+  #debug-panel .dbg-row b { color: var(--text); font-weight: 600; }
+  #debug-panel .dbg-warn { color: var(--warn); }
+  #debug-panel .dbg-ok { color: var(--ok); }
+  #debug-panel .dbg-sep { height: 1px; background: var(--border); margin: 8px 0; }
+  #debug-panel .dbg-pieces {
+    max-height: 200px; overflow-y: auto; font-size: 10px;
+    background: rgba(0,0,0,.25); border-radius: 6px; padding: 6px 8px;
+  }
+  #debug-panel .dbg-pieces .pc { white-space: nowrap; }
+  #debug-panel .dbg-pieces .pc.ov { color: var(--warn); }
+  #debug-toolbar-btn {
+    background: var(--panel2) !important;
+  }
+  #debug-toolbar-btn.on { background: var(--warn) !important; color: #000 !important; }
 </style>
 </head>
 <body>
@@ -217,6 +249,7 @@
     <button class="tb-btn" id="btn-preview" title="显示/隐藏参考图">👁 参考图</button>
     <button class="tb-btn" id="btn-scatter" title="重新散开未拼合的块">🔀 重新散开</button>
     <button class="tb-btn" id="btn-pause" title="暂停/继续">⏸ 暂停</button>
+    <button class="tb-btn" id="debug-toolbar-btn" title="显示/隐藏调试信息">🐞 调试</button>
     <div class="spacer"></div>
     <span class="stat" id="stat-moves">移动 <b>0</b></span>
     <span class="stat" id="stat-progress">进度 <b>0%</b></span>
@@ -226,6 +259,7 @@
   <div id="canvas-wrap">
     <canvas id="game-canvas"></canvas>
     <div id="banner"></div>
+    <div id="debug-panel"></div>
     <div id="complete-overlay">
       <div class="complete-card">
         <div class="emoji">🎉</div>
@@ -300,9 +334,13 @@ const Subject = {
   create(img, boardW, boardH) {
     const boardArea = boardW * boardH;
     let w = img.naturalWidth, h = img.naturalHeight;
-    // 面积驱动缩放：目标 ≈ 35% 画布面积，且单边 ≤ 90% 画布
+    // 面积驱动缩放：目标 ≈ 35% 画布面积；
+    // 单边约束：宽 ≤ 画布宽 65%、高 ≤ 画布高 65%——
+    // 否则参考图会占满整个维度，散开时边缘条带放不下任何块。
+    const MAX_SIDE = 0.65;
     let scale = 1;
-    while ((w * h) / boardArea > SUBJECT_AREA_RATIO || w > boardW * 0.9 || h > boardH * 0.9) {
+    while ((w * h) / boardArea > SUBJECT_AREA_RATIO ||
+           w > boardW * MAX_SIDE || h > boardH * MAX_SIDE) {
       scale -= 0.01;
       w = Math.round(img.naturalWidth * scale);
       h = Math.round(img.naturalHeight * scale);
@@ -603,51 +641,57 @@ class Puzzle {
     this.moves = 0;
   }
 
-  // ---- 散开：螺旋铺放，避开中央参考图区（文档 §3.5.4）----
+  // ---- 散开：整画布网格 + 按压参考图程度排序分配（文档 §3.5.4）----
+  // 核心思路：在全画布铺均匀网格（充分利用上下条带的横向容量），
+  // 每格计算「与参考图的重叠面积」，优先分配重叠少的格（边缘优先），
+  // 重叠多的格（压参考图）作为补充容量。这样既不浪费上下条带，又优先避开参考图。
   scatter() {
-    // 先把所有拼块拆回单块组（否则散开后旧的 group 引用还在，
-    // 拖一块会牵动整个旧组——尤其完成后重新散开的场景）
+    // 先把所有拼块拆回单块组
     for (const p of this.pieces) {
       if (!p.group || p.group.pieces.length !== 1) p.group = new Group([p]);
     }
-    // 计算中央参考图区域（避开）
+    // 参考图区
     const cx = this.W / 2, cy = this.H / 2;
     const sw = this.subject.width, sh = this.subject.height;
-    const reserve = { x: cx - sw / 2 - 24, y: cy - sh / 2 - 24, w: sw + 48, h: sh + 48 };
+    const PAD = 12;
+    const prev = { left: cx - sw / 2, right: cx + sw / 2, top: cy - sh / 2, bottom: cy + sh / 2 };
 
     // 平均块渲染尺寸
     let avgW = 0, avgH = 0;
     for (const p of this.pieces) { avgW += p.width; avgH += p.height; }
-    avgW = avgW / this.pieces.length * 1.06;
-    avgH = avgH / this.pieces.length * 1.06;
+    avgW = avgW / this.pieces.length;
+    avgH = avgH / this.pieces.length;
 
-    // 螺旋单元格大小
-    const cellW = avgW, cellH = avgH;
-    // 计算外围可铺的行列数
-    const cols = Math.floor((this.W - 24) / cellW);
-    const rows = Math.floor((this.H - 24) / cellH);
-    const startX = (this.W - cols * cellW) / 2 + cellW / 2;
-    const startY = (this.H - rows * cellH) / 2 + cellH / 2;
+    // 单元格：保证相邻格的块中心距 > 块宽，抖动后也不重叠
+    const CELL_GAP = 0.16;
+    const cellW = avgW * (1 + CELL_GAP);
+    const cellH = avgH * (1 + CELL_GAP);
+    const jitterX = avgW * CELL_GAP * 0.5 * 0.6;
+    const jitterY = avgH * CELL_GAP * 0.5 * 0.6;
 
-    // 生成所有单元格坐标，按螺旋顺序排列
+    // 全画布网格
+    const cols = Math.max(1, Math.floor((this.W - PAD * 2) / cellW));
+    const rows = Math.max(1, Math.floor((this.H - PAD * 2) / cellH));
+    const ox = PAD + (this.W - PAD * 2 - cols * cellW) / 2 + cellW / 2;
+    const oy = PAD + (this.H - PAD * 2 - rows * cellH) / 2 + cellH / 2;
+
+    // 生成所有格子，计算每格用「平均块尺寸」时与参考图的重叠面积（0=不压）
     const cells = [];
-    const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
-    // 螺旋方向：右0 下1 左2 上3
-    let r = 0, c = 0, dir = 0;
-    const dr = [0, 1, 0, -1], dc = [1, 0, -1, 0];
-    for (let i = 0; i < rows * cols; i++) {
-      cells.push({ r, c });
-      visited[r][c] = true;
-      const nr = r + dr[dir], nc = c + dc[dir];
-      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols || visited[nr][nc]) {
-        dir = (dir + 1) % 4;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x = ox + c * cellW, y = oy + r * cellH;
+        // 该格中心放一块(avgW×avgH)时，与参考图的重叠面积
+        const ox2 = Math.min(x + avgW/2, prev.right) - Math.max(x - avgW/2, prev.left);
+        const oy2 = Math.min(y + avgH/2, prev.bottom) - Math.max(y - avgH/2, prev.top);
+        const overlap = ox2 > 0 && oy2 > 0 ? ox2 * oy2 : 0;
+        cells.push({ x, y, overlap, used: false });
       }
-      r += dr[dir]; c += dc[dir];
     }
+    // 按重叠面积升序排（不压参考图的格优先；同等重叠的随机打乱避免规律性）
+    cells.sort((a, b) => a.overlap - b.overlap || Math.random() - 0.5);
 
-    // 按 sort 错位排序（相邻块尽量不挨着放）
+    // 拼块错位排序（相邻块尽量不挨着放）
     const sorted = this.pieces.slice().sort((a, b) => a.sort - b.sort);
-    // 错位：把后半插入前半
     const reordered = [];
     const half = Math.ceil(sorted.length / 2);
     for (let i = 0; i < half; i++) {
@@ -655,36 +699,48 @@ class Puzzle {
       if (i + half < sorted.length) reordered.push(sorted[i + half]);
     }
 
-    // 逐块放置到单元格，跳过与参考图区重叠的格
+    // 逐块放置：消费排序后的格子
+    for (const p of this.pieces) p._scattered = false;
     let cellIdx = 0;
     for (const p of reordered) {
+      const b = Knife.bounds(p);
+      // 主路径：消费格子（已按压参考图程度排序，靠前的格最安全）
       let placed = false;
       while (cellIdx < cells.length) {
         const cell = cells[cellIdx++];
-        const px = startX + cell.c * cellW;
-        const py = startY + cell.r * cellH;
-        // 检查是否与参考图区重叠
-        const b = Knife.bounds(p);
-        if (px + b.w / 2 > reserve.x && px - b.w / 2 < reserve.x + reserve.w &&
-            py + b.h / 2 > reserve.y && py - b.h / 2 < reserve.y + reserve.h) {
-          continue; // 重叠，跳过此格
-        }
-        // 加抖动
-        const jx = (Math.random() - 0.5) * cellW * 0.16;
-        const jy = (Math.random() - 0.5) * cellH * 0.16;
-        p.x = Utils.clamp(px + jx, b.w / 2 + 12, this.W - b.w / 2 - 12);
-        p.y = Utils.clamp(py + jy, b.h / 2 + 12, this.H - b.h / 2 - 12);
+        const jx = (Math.random() - 0.5) * jitterX * 2;
+        const jy = (Math.random() - 0.5) * jitterY * 2;
+        p.x = Utils.clamp(cell.x + jx, b.w / 2 + PAD, this.W - b.w / 2 - PAD);
+        p.y = Utils.clamp(cell.y + jy, b.h / 2 + PAD, this.H - b.h / 2 - PAD);
         p.hasMoved = false;
+        p._scattered = true;
         p.z = ++this.zCounter;
+        cell.used = true;
         placed = true;
         break;
       }
-      if (!placed) {
-        // 兜底：随机放
-        p.x = Utils.clamp(Math.random() * this.W, p.width / 2 + 12, this.W - p.width / 2 - 12);
-        p.y = Utils.clamp(Math.random() * this.H, p.height / 2 + 12, this.H - p.height / 2 - 12);
-        p.z = ++this.zCounter;
+      if (placed) continue;
+      // 兜底：格子用完（块比格多），拒绝采样找最少碰撞位
+      const bw = p.width, bh = p.height;
+      const loX = bw / 2 + PAD, hiX = this.W - bw / 2 - PAD;
+      const loY = bh / 2 + PAD, hiY = this.H - bh / 2 - PAD;
+      let best = null;
+      for (let a = 0; a < 100; a++) {
+        const fx = loX + Math.random() * (hiX - loX);
+        const fy = loY + Math.random() * (hiY - loY);
+        let hits = 0;
+        for (const op of this.pieces) {
+          if (op === p || !op._scattered) continue;
+          if (Math.abs(fx - op.x) < (bw + op.width) / 2 - 2 &&
+              Math.abs(fy - op.y) < (bh + op.height) / 2 - 2) hits++;
+        }
+        if (hits === 0) { best = { x: fx, y: fy }; break; }
+        if (!best || hits < best.hits) best = { x: fx, y: fy, hits };
       }
+      p.x = best ? best.x : loX;
+      p.y = best ? best.y : loY;
+      p._scattered = true;
+      p.z = ++this.zCounter;
     }
   }
 
@@ -931,6 +987,8 @@ const App = {
       btnPreview: $("btn-preview"),
       btnScatter: $("btn-scatter"),
       btnPause: $("btn-pause"),
+      btnDebug: $("debug-toolbar-btn"),
+      debugPanel: $("debug-panel"),
       btnNew: $("btn-new"),
       statMoves: $("stat-moves"),
       statProgress: $("stat-progress"),
@@ -1192,8 +1250,16 @@ const App = {
       // 只散开未完成的块（拆散所有非最大组）
       this.puzzle.scatter();
       this.banner("已重新散开", 1200);
+      if (this.el.debugPanel.classList.contains("show")) this.updateDebug();
     });
     this.el.btnPause.addEventListener("click", () => this.togglePause());
+    // 调试面板开关
+    this.el.btnDebug.addEventListener("click", () => {
+      const on = !this.el.debugPanel.classList.contains("show");
+      this.el.debugPanel.classList.toggle("show", on);
+      this.el.btnDebug.classList.toggle("on", on);
+      if (on) this.updateDebug();
+    });
     this.el.btnNew.addEventListener("click", () => {
       this.stopTimer();
       this.showScreen("upload");
@@ -1309,6 +1375,92 @@ const App = {
     b.classList.add("show");
     clearTimeout(this._bannerTimer);
     if (ms) this._bannerTimer = setTimeout(() => b.classList.remove("show"), ms);
+  },
+
+  // ---- 调试面板：画布/原图尺寸、块数、网格、每块位置、重叠统计 ----
+  updateDebug() {
+    if (!this.puzzle) return;
+    const pz = this.puzzle;
+    const ps = pz.pieces;
+    // 计算每块的渲染尺寸（含凸耳+margin）
+    const sizes = ps.map(p => ({ w: p.width, h: p.height }));
+    const avgW = sizes.reduce((s, x) => s + x.w, 0) / sizes.length;
+    const avgH = sizes.reduce((s, x) => s + x.h, 0) / sizes.length;
+
+    // 重叠检测：AABB 相交面积 > 阈值
+    const OVERLAP_TOL = 2; // 允许 2px 误差（描边/抗锯齿）
+    const overlaps = []; // [[i, j, ox, oy], ...]
+    for (let i = 0; i < ps.length; i++) {
+      for (let j = i + 1; j < ps.length; j++) {
+        const a = ps[i], b = ps[j];
+        const aw = a.width, ah = a.height, bw = b.width, bh = b.height;
+        const ox = Math.min(a.x + aw/2, b.x + bw/2) - Math.max(a.x - aw/2, b.x - bw/2);
+        const oy = Math.min(a.y + ah/2, b.y + bh/2) - Math.max(a.y - ah/2, b.y - bh/2);
+        if (ox > OVERLAP_TOL && oy > OVERLAP_TOL) {
+          overlaps.push({ i: a.id, j: b.id, ox: Math.round(ox), oy: Math.round(oy) });
+        }
+      }
+    }
+    const overlapIds = new Set();
+    overlaps.forEach(o => { overlapIds.add(o.i); overlapIds.add(o.j); });
+
+    // 组统计
+    const groups = new Map();
+    for (const p of ps) {
+      const g = p.group;
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(p);
+    }
+    const groupSizes = [...groups.values()].map(g => g.length).sort((a,b) => b-a);
+
+    // 参考图区域
+    const cx = pz.W/2, cy = pz.H/2, sw = pz.subject.width, sh = pz.subject.height;
+    const reserve = { x: cx-sw/2-24, y: cy-sh/2-24, w: sw+48, h: sh+48 };
+    // 块落在参考图上的数量
+    let onPreview = 0;
+    for (const p of ps) {
+      if (p.x + p.width/2 > reserve.x && p.x - p.width/2 < reserve.x + reserve.w &&
+          p.y + p.height/2 > reserve.y && p.y - p.height/2 < reserve.y + reserve.h) onPreview++;
+    }
+
+    const html = [];
+    html.push(`<h4>📐 尺寸</h4>`);
+    html.push(`<div class="dbg-row"><span>画布</span><b>${pz.W} × ${pz.H}</b></div>`);
+    html.push(`<div class="dbg-row"><span>原图（原始）</span><b>${this.imgFile.naturalWidth} × ${this.imgFile.naturalHeight}</b></div>`);
+    html.push(`<div class="dbg-row"><span>源图（缩放后）</span><b>${sw} × ${sh}</b></div>`);
+    html.push(`<div class="dbg-row"><span>缩放比</span><b>${(sw/this.imgFile.naturalWidth*100).toFixed(0)}%</b></div>`);
+    html.push(`<div class="dbg-sep"></div>`);
+    html.push(`<h4>🧩 拼块</h4>`);
+    html.push(`<div class="dbg-row"><span>总块数</span><b>${ps.length}</b></div>`);
+    html.push(`<div class="dbg-row"><span>网格</span><b>${pz.choice.rows} 行 × ${pz.choice.cols} 列</b></div>`);
+    html.push(`<div class="dbg-row"><span>块边长(core)</span><b>${pz.choice.size}px</b></div>`);
+    html.push(`<div class="dbg-row"><span>平均渲染块</span><b>${avgW.toFixed(0)} × ${avgH.toFixed(0)}</b></div>`);
+    html.push(`<div class="dbg-row"><span>组数（按大小）</span><b>${groupSizes.join(", ")}</b></div>`);
+    html.push(`<div class="dbg-sep"></div>`);
+    html.push(`<h4>⚠️ 布局质量</h4>`);
+    const ovCls = overlaps.length === 0 ? "dbg-ok" : "dbg-warn";
+    const prCls = onPreview === 0 ? "dbg-ok" : "dbg-warn";
+    html.push(`<div class="dbg-row"><span>重叠对数</span><b class="${ovCls}">${overlaps.length}</b></div>`);
+    html.push(`<div class="dbg-row"><span>涉及块数</span><b class="${ovCls}">${overlapIds.size}</b></div>`);
+    html.push(`<div class="dbg-row"><span>压参考图</span><b class="${prCls}">${onPreview}</b></div>`);
+    if (overlaps.length > 0) {
+      html.push(`<div class="dbg-pieces">`);
+      overlaps.slice(0, 20).forEach(o => {
+        html.push(`<div class="pc ov">#${o.i} ⇄ #${o.j}: 重叠 ${o.ox}×${o.oy}px</div>`);
+      });
+      if (overlaps.length > 20) html.push(`<div class="pc">... 还有 ${overlaps.length-20} 对</div>`);
+      html.push(`</div>`);
+    }
+    html.push(`<div class="dbg-sep"></div>`);
+    html.push(`<h4>📍 每块位置 (id: x, y, w×h)</h4>`);
+    html.push(`<div class="dbg-pieces">`);
+    ps.forEach(p => {
+      const cls = overlapIds.has(p.id) ? "pc ov" : "pc";
+      const grp = p.group && p.group.pieces.length > 1 ? ` [g${p.group.id}:${p.group.pieces.length}]` : "";
+      html.push(`<div class="${cls}">#${p.id}: (${Math.round(p.x)}, ${Math.round(p.y)}) ${Math.round(p.width)}×${Math.round(p.height)}${grp}</div>`);
+    });
+    html.push(`</div>`);
+    this.el.debugPanel.innerHTML = html.join("");
   },
 };
 
