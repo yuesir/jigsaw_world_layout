@@ -361,20 +361,99 @@ const Subject = {
  *    生成拼块规格、凸凹互补、贝塞尔曲线、预渲染掩码
  * ============================================================ */
 const Knife = {
-  // 生成一条边的参数（凸/凹 + 几何）—— 右/下边用
-  edge(span, rng) {
+  // ===== 凸耳模板（移植自 jigex-prog.js traditionalKnife）=====
+  // 每个模板 12 个归一化控制点：{fromBase(垂直偏移), alongBase(沿边进度)}
+  // fromBase: 0=贴边线, 正=凸出, 负=颈部内凹；alongBase: 0=起点 1=终点
+  // 凸耳高度由模板决定：sock 34.5%、finger 34.5%、ball 29.5%、stub 23.5%
+  // 凹陷(ptsReversed)沿边线镜像：alongBase 取负，fromBase 保持不变
+  TEMPLATES: (function () {
+    function mk(pts, rev, name) {
+      return { name, pts, ptsReversed: rev };
+    }
+    // sock（袜状）—— 经典葫芦颈
+    const sockP = [
+      {f:0.011364,a:0.094697},{f:-0.030303,a:0.227273},{f:-0.117424,a:0.537879},{f:0.132576,a:0.382576},
+      {f:0.344697,a:0.284091},{f:0.268939,a:0.541667},{f:0.208333,a:0.681818},{f:0.056818,a:0.575758},
+      {f:-0.079545,a:0.515152},{f:-0.018939,a:0.761364},{f:0.011364,a:0.905303},{f:0,a:1}
+    ].map(p => ({fromBase:p.f, alongBase:p.a}));
+    const sockR = [
+      {f:0.011364,a:-0.094697},{f:-0.018939,a:-0.238636},{f:-0.079545,a:-0.484848},{f:0.056818,a:-0.424242},
+      {f:0.208333,a:-0.318182},{f:0.268939,a:-0.458333},{f:0.344697,a:-0.715909},{f:0.132576,a:-0.617424},
+      {f:-0.117424,a:-0.462121},{f:-0.030303,a:-0.772727},{f:0.011364,a:-0.905303},{f:0,a:-1}
+    ].map(p => ({fromBase:p.f, alongBase:p.a}));
+    // finger（指状）—— 颈部偏直，凸耳偏长方
+    const fingerP = [
+      {f:0,a:0.049242},{f:-0.022727,a:0.159091},{f:-0.068182,a:0.545455},{f:0.125,a:0.412879},
+      {f:0.344697,a:0.253788},{f:0.272727,a:0.473485},{f:0.238636,a:0.553030},{f:0.121212,a:0.549242},
+      {f:-0.109848,a:0.5},{f:-0.018939,a:0.761364},{f:0.011364,a:0.905303},{f:0,a:1}
+    ].map(p => ({fromBase:p.f, alongBase:p.a}));
+    const fingerR = [
+      {f:0.011364,a:-0.094697},{f:-0.018939,a:-0.238636},{f:-0.109848,a:-0.5},{f:0.121212,a:-0.450758},
+      {f:0.238636,a:-0.446970},{f:0.272727,a:-0.526515},{f:0.344697,a:-0.746212},{f:0.125,a:-0.587121},
+      {f:-0.068182,a:-0.454545},{f:-0.022727,a:-0.840909},{f:0,a:-0.950758},{f:0,a:-1}
+    ].map(p => ({fromBase:p.f, alongBase:p.a}));
+    // ball（球状）—— 凸耳接近圆形，矮胖
+    const ballP = [
+      {f:-0.003788,a:0.064394},{f:-0.026515,a:0.162879},{f:-0.098485,a:0.534091},{f:0.056818,a:0.431818},
+      {f:0.287879,a:0.265152},{f:0.295455,a:0.5},{f:0.287879,a:0.715909},{f:0.056818,a:0.575758},
+      {f:-0.079545,a:0.515152},{f:-0.018939,a:0.761364},{f:0.011364,a:0.905303},{f:0,a:1}
+    ].map(p => ({fromBase:p.f, alongBase:p.a}));
+    const ballR = [
+      {f:0.011364,a:-0.094697},{f:-0.018939,a:-0.238636},{f:-0.079545,a:-0.484848},{f:0.056818,a:-0.424242},
+      {f:0.287879,a:-0.284091},{f:0.295455,a:-0.5},{f:0.287879,a:-0.734848},{f:0.056818,a:-0.568182},
+      {f:-0.098485,a:-0.465909},{f:-0.026515,a:-0.837121},{f:-0.003788,a:-0.935606},{f:0,a:-1}
+    ].map(p => ({fromBase:p.f, alongBase:p.a}));
+    // stub（短桩）—— 凸耳短粗，接近矩形
+    const stubP = [
+      {f:0.007576,a:0.094697},{f:-0.049242,a:0.219697},{f:-0.117424,a:0.397727},{f:0.018939,a:0.378788},
+      {f:0.234848,a:0.363636},{f:0.151515,a:0.617424},{f:0.109848,a:0.708333},{f:-0.015152,a:0.617424},
+      {f:-0.181818,a:0.518939},{f:-0.030303,a:0.837121},{f:0.003788,a:0.909091},{f:0,a:1}
+    ].map(p => ({fromBase:p.f, alongBase:p.a}));
+    const stubR = [
+      {f:0.003788,a:-0.090909},{f:-0.030303,a:-0.162879},{f:-0.181818,a:-0.481061},{f:-0.015152,a:-0.382576},
+      {f:0.109848,a:-0.291667},{f:0.151515,a:-0.382576},{f:0.234848,a:-0.636364},{f:0.018939,a:-0.621212},
+      {f:-0.117424,a:-0.602273},{f:-0.049242,a:-0.780303},{f:0.007576,a:-0.905303},{f:0,a:-1}
+    ].map(p => ({fromBase:p.f, alongBase:p.a}));
     return {
-      border: false,
-      tab: rng() >= 0.5,                                    // true=凸 false=凹
-      thick: Math.max(12, Math.round(span * (0.16 + rng() * 0.08))), // 凸耳高度
-      sh: 0.18 + rng() * 0.06,                              // 肩部缩进
-      cr: 0.18 + rng() * 0.06,                              // 颈部半宽
-      pi: 0.05 + rng() * 0.04,                              // 颈部内缩
+      sock: mk(sockP, sockR, "sock"),
+      finger: mk(fingerP, fingerR, "finger"),
+      ball: mk(ballP, ballR, "ball"),
+      stub: mk(stubP, stubR, "stub"),
+      // 索引数组：[Nn=sock, Rn=finger, Dn=ball, Gn=stub]
+      list: [null, null, null, null],
     };
+  })(),
+  // 形状选择表（移植自 jigex-prog.js Ee 表）：36 项，决定每条边用哪种模板 + 是否翻转
+  // 0:ball直, 1:ball翻, 2:finger直, 3:finger翻, 4:stub直, 5:stub翻, default:sock(奇数翻)
+  SHAPE_TABLE: [0,1,6,4,1,7,5,9,2,8,6,9,0,5,9,6,7,9,3,7,2,0,8,4,9,6,2,6,8,4,3,0,8,3,2,7,9],
+  // 凸凹真值表（移植自 jigex-prog.js _e 表）：30 项，决定右/下边是凸还是凹
+  TAB_HOLE: [false,false,true,false,true,true,false,true,true,false,true,false,true,true,false,true,true,false,true,false,true,true,false,true,true,false,true,false,true,true],
+
+  // 把 SHAPE_TABLE 项转成 {template, bend}
+  shapeFor(ord) {
+    const T = this.TEMPLATES;
+    switch (ord) {
+      case 0: return { template: T.ball, bend: false };
+      case 1: return { template: T.ball, bend: true };
+      case 2: return { template: T.finger, bend: false };
+      case 3: return { template: T.finger, bend: true };
+      case 4: return { template: T.stub, bend: false };
+      case 5: return { template: T.stub, bend: true };
+      default: return { template: T.sock, bend: ord % 2 === 1 };
+    }
+  },
+
+  // 生成一条边的参数（凸/凹 + 模板）—— 右/下边用
+  // tab 由 TAB_HOLE 表查得（种子化，可复现）；模板由 SHAPE_TABLE 查得
+  edge(shapeIdx, tabIdx) {
+    const shapeOrd = this.SHAPE_TABLE[shapeIdx % this.SHAPE_TABLE.length];
+    const { template, bend } = this.shapeFor(shapeOrd);
+    const tab = this.TAB_HOLE[tabIdx % this.TAB_HOLE.length];
+    return { border: false, tab, thick: 0, curves: template, bend };
   },
   // 凸凹取反（邻居互补）—— 左/上边继承自邻居
   flip(edge) {
-    return { border: false, tab: !edge.tab, thick: edge.thick, sh: edge.sh, cr: edge.cr, pi: edge.pi };
+    return { border: false, tab: !edge.tab, thick: edge.thick, curves: edge.curves, bend: edge.bend };
   },
 
   // 主切图：三遍扫描生成所有拼块规格
@@ -427,26 +506,48 @@ const Knife = {
     }
 
     // --- 第二遍：凸凹分配（左/上继承，右/下新生成）→ 天然互补 ---
+    // 用种子化的游标查表，保证同图同种子 → 同一套凸凹布局（可复现）
+    let shapeCursor = Math.floor(rng() * 36);   // 形状表起点
+    let tabRightCursor = Math.floor(rng() * 30);  // 右边凸凹游标
+    let tabBottomCursor = Math.floor(rng() * 30); // 下边凸凹游标
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const p = grid[row][col];
         const top = row === 0, left = col === 0;
         const right = col === cols - 1, bottom = row === rows - 1;
-        p.edges.top    = top    ? { border: true, tab: false, thick: 0 }
+        p.edges.top    = top    ? { border: true, tab: false, thick: 0, curves: null, bend: false }
                                 : this.flip(grid[row - 1][col].edges.bottom);
-        p.edges.left   = left   ? { border: true, tab: false, thick: 0 }
+        p.edges.left   = left   ? { border: true, tab: false, thick: 0, curves: null, bend: false }
                                 : this.flip(grid[row][col - 1].edges.right);
-        p.edges.right  = right  ? { border: true, tab: false, thick: 0 }
-                                : this.edge(p.core.height, rng);
-        p.edges.bottom = bottom ? { border: true, tab: false, thick: 0 }
-                                : this.edge(p.core.width, rng);
-        // 计算含凸耳的外接尺寸
-        p.width  = p.edges.left.thick + p.core.width  + p.edges.right.thick  + MARGIN * 2;
-        p.height = p.edges.top.thick  + p.core.height + p.edges.bottom.thick + MARGIN * 2;
-        p.core.x = p.edges.left.thick + MARGIN;
-        p.core.y = p.edges.top.thick  + MARGIN;
-        p.isEdge = top || left || right || bottom;
+        // 右/下边：查表选形状 + 查表选凸凹，游标递增
+        const eRight = right ? null : this.edge(shapeCursor, tabRightCursor);
+        if (!right) { shapeCursor = (shapeCursor + 1) % 36; tabRightCursor = (tabRightCursor + 1) % 30; }
+        const eBottom = bottom ? null : this.edge(shapeCursor, tabBottomCursor);
+        if (!bottom) { shapeCursor = (shapeCursor + 1) % 36; tabBottomCursor = (tabBottomCursor + 1) % 30; }
+        p.edges.right  = right  ? { border: true, tab: false, thick: 0, curves: null, bend: false } : eRight;
+        p.edges.bottom = bottom ? { border: true, tab: false, thick: 0, curves: null, bend: false } : eBottom;
       }
+    }
+
+    // --- 第二遍半：测量每条边的凸耳厚度（fromBase 最大值 × 边长）---
+    // 凸耳高度由模板决定，需遍历控制点算出 fromBase 峰值
+    for (const p of list) {
+      for (const side of ["top", "right", "bottom", "left"]) {
+        const e = p.edges[side];
+        if (e.border || !e.curves) { e.thick = 0; continue; }
+        // tab 用 pts(凸)，hole 用 ptsReversed(凹)，取 fromBase 绝对值最大者 × 边长
+        const pts = e.bend ? e.curves.pts : e.curves.ptsReversed;
+        let maxF = 0;
+        for (const pt of pts) { const a = Math.abs(pt.fromBase); if (a > maxF) maxF = a; }
+        const span = (side === "top" || side === "bottom") ? p.core.width : p.core.height;
+        e.thick = Math.round(maxF * span) + 1;
+      }
+      // 计算含凸耳的外接尺寸
+      p.width  = p.edges.left.thick + p.core.width  + p.edges.right.thick  + MARGIN * 2;
+      p.height = p.edges.top.thick  + p.core.height + p.edges.bottom.thick + MARGIN * 2;
+      p.core.x = p.edges.left.thick + MARGIN;
+      p.core.y = p.edges.top.thick  + MARGIN;
+      p.isEdge = (p.row === 0 || p.col === 0 || p.row === rows - 1 || p.col === cols - 1);
     }
 
     // --- 第三遍：建立邻居引用（用于吸附判定）---
@@ -464,61 +565,64 @@ const Knife = {
     return list;
   },
 
-  // ---- 四条边的贝塞尔曲线绘制（3 段三次贝塞尔拟合凸耳）----
-  topEdge(c, x, y, size, edge) {
-    if (edge.border) { c.lineTo(x + size, y); return; }
-    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi;
-    const ctr = x + size / 2, l = ctr - cr - pi, r = ctr + cr + pi;
-    const d = edge.tab ? -edge.thick : edge.thick; // tab 向上凸
-    c.lineTo(x + sh, y);
-    c.bezierCurveTo(x + size * 0.28, y, l - size * 0.04, y + d * 0.36, l, y + d * 0.56);
-    c.bezierCurveTo(ctr - cr * 0.48, y + d, ctr + cr * 0.48, y + d, r, y + d * 0.56);
-    c.bezierCurveTo(r + size * 0.04, y + d * 0.36, x + size * 0.72, y, x + size - sh, y);
-    c.lineTo(x + size, y);
-  },
-  rightEdge(c, x, y, size, edge) {
-    if (edge.border) { c.lineTo(x, y + size); return; }
-    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi;
-    const ctr = y + size / 2, t = ctr - cr - pi, b = ctr + cr + pi;
-    const d = edge.tab ? edge.thick : -edge.thick; // tab 向右凸
-    c.lineTo(x, y + sh);
-    c.bezierCurveTo(x, y + size * 0.28, x + d * 0.36, t - size * 0.04, x + d * 0.56, t);
-    c.bezierCurveTo(x + d, ctr - cr * 0.48, x + d, ctr + cr * 0.48, x + d * 0.56, b);
-    c.bezierCurveTo(x + d * 0.36, b + size * 0.04, x, y + size * 0.72, x, y + size - sh);
-    c.lineTo(x, y + size);
-  },
-  bottomEdge(c, x, y, size, edge) {
-    if (edge.border) { c.lineTo(x - size, y); return; }
-    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi;
-    const ctr = x - size / 2, l = ctr - cr - pi, r = ctr + cr + pi;
-    const d = edge.tab ? edge.thick : -edge.thick; // tab 向下凸
-    c.lineTo(x - sh, y);
-    c.bezierCurveTo(x - size * 0.28, y, r + size * 0.04, y + d * 0.36, r, y + d * 0.56);
-    c.bezierCurveTo(ctr + cr * 0.48, y + d, ctr - cr * 0.48, y + d, l, y + d * 0.56);
-    c.bezierCurveTo(l - size * 0.04, y + d * 0.36, x - size * 0.72, y, x - size + sh, y);
-    c.lineTo(x - size, y);
-  },
-  leftEdge(c, x, y, size, edge) {
-    if (edge.border) { c.lineTo(x, y - size); return; }
-    const sh = size * edge.sh, cr = size * edge.cr, pi = size * edge.pi;
-    const ctr = y - size / 2, t = ctr - cr - pi, b = ctr + cr + pi;
-    const d = edge.tab ? -edge.thick : edge.thick; // tab 向左凸
-    c.lineTo(x, y - sh);
-    c.bezierCurveTo(x, y - size * 0.28, x + d * 0.36, b + size * 0.04, x + d * 0.56, b);
-    c.bezierCurveTo(x + d, ctr + cr * 0.48, x + d, ctr - cr * 0.48, x + d * 0.56, t);
-    c.bezierCurveTo(x + d * 0.36, t - size * 0.04, x, y - size * 0.72, x, y - size + sh);
-    c.lineTo(x, y - size);
+  // ---- 单条边的绘制（移植自 jigex-prog.js drawEdge，6 段二次贝塞尔）----
+  // edge 含：startX/Y, endX/Y, side(0左1下2右3上), tab, bend, curves(模板)
+  // 12 个控制点两两配对，每对画一段 quadraticCurveTo(控制点, 终点)
+  drawEdge(c, edge) {
+    if (edge.border) { c.lineTo(edge.endX, edge.endY); return; }
+    const vertical = edge.startX === edge.endX;          // 垂直边（左右）？
+    const d = vertical                                  // 边的像素长度
+      ? Math.abs(edge.startY - edge.endY)
+      : Math.abs(edge.startX - edge.endX);
+    const pts = edge.bend ? edge.curves.pts : edge.curves.ptsReversed;
+    // 方向系数：s = 垂直于边线的偏移符号(凸出方向)，l = 沿边线的方向符号
+    // 严格对应 jigex-prog.js drawEdge 的 switch（side: 0左 1下 2右 3上）
+    let s, l;
+    switch (edge.side) {
+      case 0: s = edge.tab ? -1 : 1; l = edge.bend ? 1 : -1; break;  // 左边
+      case 1: s = edge.tab ? 1 : -1; l = edge.bend ? 1 : -1; break;  // 下边
+      case 2: s = edge.tab ? 1 : -1; l = edge.bend ? -1 : 1; break;  // 右边
+      case 3: s = edge.tab ? -1 : 1; l = edge.bend ? -1 : 1; break;  // 上边
+      default: s = 1; l = 1;
+    }
+    for (let i = 0; i < 12; ) {
+      const r = pts[i++]; // 控制点
+      const a = pts[i++]; // 终点
+      let cx, cy, ex, ey;
+      if (vertical) {
+        cx = edge.startX + d * r.fromBase * s;
+        cy = edge.startY + d * r.alongBase * l;
+        ex = edge.startX + d * a.fromBase * s;
+        ey = edge.startY + d * a.alongBase * l;
+      } else {
+        cx = edge.startX + d * r.alongBase * l;
+        cy = edge.startY + d * r.fromBase * s;
+        ex = edge.startX + d * a.alongBase * l;
+        ey = edge.startY + d * a.fromBase * s;
+      }
+      c.quadraticCurveTo(cx, cy, ex, ey);
+    }
   },
 
-  // 绘制完整轮廓（闭合路径）
+  // 绘制完整轮廓（闭合路径）—— 严格对应 jigex-prog.js outline 顺时针顺序
+  // 起点 = 左上角 (x,y)，顺序：左(下)→下(右)→右(上)→上(左)
   outline(c, piece) {
     const x = piece.core.x, y = piece.core.y, w = piece.core.width, h = piece.core.height;
+    const top = piece.edges.top, left = piece.edges.left, right = piece.edges.right, bottom = piece.edges.bottom;
     c.beginPath();
     c.moveTo(x, y);
-    this.topEdge(c, x, y, w, piece.edges.top);
-    this.rightEdge(c, x + w, y, h, piece.edges.right);
-    this.bottomEdge(c, x + w, y + h, w, piece.edges.bottom);
-    this.leftEdge(c, x, y + h, h, piece.edges.left);
+    // 左边：上→下  (x,y)→(x,y+h), side=0
+    left.startX = x; left.startY = y; left.endX = x; left.endY = y + h; left.side = 0;
+    this.drawEdge(c, left);
+    // 下边：左→右  (x,y+h)→(x+w,y+h), side=1
+    bottom.startX = x; bottom.startY = y + h; bottom.endX = x + w; bottom.endY = y + h; bottom.side = 1;
+    this.drawEdge(c, bottom);
+    // 右边：下→上  (x+w,y+h)→(x+w,y), side=2
+    right.startX = x + w; right.startY = y + h; right.endX = x + w; right.endY = y; right.side = 2;
+    this.drawEdge(c, right);
+    // 上边：右→左  (x+w,y)→(x,y), side=3
+    top.startX = x + w; top.startY = y; top.endX = x; top.endY = y; top.side = 3;
+    this.drawEdge(c, top);
     c.closePath();
   },
 
