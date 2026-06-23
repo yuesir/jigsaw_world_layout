@@ -452,8 +452,11 @@ const Knife = {
     return { border: false, tab, thick: 0, curves: template, bend };
   },
   // 凸凹取反（邻居互补）—— 左/上边继承自邻居
+  // 关键：tab 和 bend 都要翻转！这是 jigex 原版的设计——
+  // bend 翻转让 hole 使用 ptsReversed（与 tab 的 pts 配对），
+  // 配合相反的 l 方向系数，两条边画出同一条物理曲线。
   flip(edge) {
-    return { border: false, tab: !edge.tab, thick: edge.thick, curves: edge.curves, bend: edge.bend };
+    return { border: false, tab: !edge.tab, thick: edge.thick, curves: edge.curves, bend: !edge.bend };
   },
 
   // 主切图：三遍扫描生成所有拼块规格
