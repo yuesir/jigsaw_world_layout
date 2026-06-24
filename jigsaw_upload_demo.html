@@ -335,8 +335,9 @@ const Subject = {
     const boardArea = boardW * boardH;
     let w = img.naturalWidth, h = img.naturalHeight;
     // 面积驱动缩放：目标 ≈ 35% 画布面积；
-    // 单边约束：宽 ≤ 画布宽 65%、高 ≤ 画布高 65%——
-    // 否则参考图会占满整个维度，散开时边缘条带放不下任何块。
+    // 单边约束：宽 ≤ 画布宽 65%、高 ≤ 画布高 65%。
+    // 65% 而非原版 90%：原版拼块小（core 100~200px），90% 时上下条带仍有空间；
+    // demo 拼块较大，65% 确保上下/左右条带能放下拼块，螺旋路径有空间绕开参考图。
     const MAX_SIDE = 0.65;
     let scale = 1;
     while ((w * h) / boardArea > SUBJECT_AREA_RATIO ||
@@ -748,106 +749,167 @@ class Puzzle {
     this.moves = 0;
   }
 
-  // ---- 散开：整画布网格 + 按压参考图程度排序分配（文档 §3.5.4）----
-  // 核心思路：在全画布铺均匀网格（充分利用上下条带的横向容量），
-  // 每格计算「与参考图的重叠面积」，优先分配重叠少的格（边缘优先），
-  // 重叠多的格（压参考图）作为补充容量。这样既不浪费上下条带，又优先避开参考图。
+  // ---- 散开：螺旋环形布局（移植自 jigex-prog.js scatter，文档 §3.5）----
+  // 核心：碎片沿「由外向内的螺旋矩形路径」依次放置，方向状态机 j 控制（3右1下2左0上）。
+  // 到边界转向并缩小可用范围（N/R 配额），碰撞检测确保不压参考图和已拼合的组。
   scatter() {
     // 先把所有拼块拆回单块组
     for (const p of this.pieces) {
       if (!p.group || p.group.pieces.length !== 1) p.group = new Group([p]);
     }
-    // 参考图区
+
+    // ===== 单元尺寸（文档 §3.1）：净宽 × 1.05 平均 =====
+    const margin2 = MARGIN * 2;
+    let p = 0, g = 0; // p=平均宽单元, g=平均高单元
+    for (const pc of this.pieces) { p += pc.width - margin2; g += pc.height - margin2; }
+    p = p * 1.05 / this.pieces.length;
+    g = g * 1.05 / this.pieces.length;
+    // 边距系数（文档 §3.1）
+    const l = p / 4, c = g / 4;     // l=水平四分之一, c=垂直四分之一
+
+    // ===== 参考图区（居中，碰撞检测用）=====
     const cx = this.W / 2, cy = this.H / 2;
-    const sw = this.subject.width, sh = this.subject.height;
     const PAD = 12;
-    const prev = { left: cx - sw / 2, right: cx + sw / 2, top: cy - sh / 2, bottom: cy + sh / 2 };
+    const prev = {
+      left: cx - this.subject.width / 2, right: cx + this.subject.width / 2,
+      top: cy - this.subject.height / 2, bottom: cy + this.subject.height / 2,
+    };
 
-    // 平均块渲染尺寸
-    let avgW = 0, avgH = 0;
-    for (const p of this.pieces) { avgW += p.width; avgH += p.height; }
-    avgW = avgW / this.pieces.length;
-    avgH = avgH / this.pieces.length;
+    // ===== 网格行列数（文档 §3.3）=====
+    let w = this.W / p;              // 横向可放碎片数（浮点）
+    let P = this.H / g;              // 纵向可放碎片数（浮点）
+    let E = (w - Math.floor(w)) >= 0.5 ? 1 : 0;  // 列数是否向上取整
+    let k = (P - Math.floor(P)) >= 0.5 ? 1 : 0;  // 行数是否向上取整
+    let S = p * (w / (Math.floor(w) + E));        // 实际列宽（均匀铺满）
+    let C = g * (P / (Math.floor(P) + k));        // 实际行高
 
-    // 单元格：保证相邻格的块中心距 > 块宽，抖动后也不重叠
-    const CELL_GAP = 0.16;
-    const cellW = avgW * (1 + CELL_GAP);
-    const cellH = avgH * (1 + CELL_GAP);
-    const jitterX = avgW * CELL_GAP * 0.5 * 0.6;
-    const jitterY = avgH * CELL_GAP * 0.5 * 0.6;
+    // ===== 螺旋边界初始化（文档 §10）=====
+    let I = p / 2;                   // 起始X（用碎片均宽 p，不是格子宽 S）
+    let L = g / 2;                   // 起始Y
+    let O = this.W;                  // 右边界
+    let A = C;                       // 上边界（初始为一个格子高）
+    let M = this.H;                  // 下边界
+    let j = 3;                       // 初始方向：向右
 
-    // 全画布网格
-    const cols = Math.max(1, Math.floor((this.W - PAD * 2) / cellW));
-    const rows = Math.max(1, Math.floor((this.H - PAD * 2) / cellH));
-    const ox = PAD + (this.W - PAD * 2 - cols * cellW) / 2 + cellW / 2;
-    const oy = PAD + (this.H - PAD * 2 - rows * cellH) / 2 + cellH / 2;
+    // ===== N/R 配额（文档 §9.2）：限制螺旋深入参考图区 =====
+    let G = this.W - this.subject.width;    // 左右两侧可用宽度之和
+    let V = this.H - this.subject.height;   // 上下两侧可用高度之和
+    let N = 999, R = 999;                    // 配额（999=无限）
+    if (G < V) { R = Math.floor(G / S); }   // 水平更窄 → 限制垂直折返
+    else { N = Math.floor(V / C); }          // 垂直更窄 → 限制水平折返
 
-    // 生成所有格子，计算每格用「平均块尺寸」时与参考图的重叠面积（0=不压）
-    const cells = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const x = ox + c * cellW, y = oy + r * cellH;
-        // 该格中心放一块(avgW×avgH)时，与参考图的重叠面积
-        const ox2 = Math.min(x + avgW/2, prev.right) - Math.max(x - avgW/2, prev.left);
-        const oy2 = Math.min(y + avgH/2, prev.bottom) - Math.max(y - avgH/2, prev.top);
-        const overlap = ox2 > 0 && oy2 > 0 ? ox2 * oy2 : 0;
-        cells.push({ x, y, overlap, used: false });
-      }
-    }
-    // 按重叠面积升序排（不压参考图的格优先；同等重叠的随机打乱避免规律性）
-    cells.sort((a, b) => a.overlap - b.overlap || Math.random() - 0.5);
+    // ===== 碰撞检测：检查目标位 (I,L) 是否压参考图区 =====
+    const inPreview = (px, py, halfW, halfH) =>
+      px + halfW > prev.left && px - halfW < prev.right &&
+      py + halfH > prev.top && py - halfH < prev.bottom;
 
-    // 拼块错位排序（相邻块尽量不挨着放）
+    // ===== 散布顺序（文档 §3.9）：sortOrder 排序 + 邻居错开 =====
     const sorted = this.pieces.slice().sort((a, b) => a.sort - b.sort);
     const reordered = [];
-    const half = Math.ceil(sorted.length / 2);
-    for (let i = 0; i < half; i++) {
-      reordered.push(sorted[i]);
-      if (i + half < sorted.length) reordered.push(sorted[i + half]);
+    {
+      // 邻居错开：逐个弹出，若与上一个放的是邻居则推回队首重试，最多5次
+      const queue = sorted.slice();
+      let last = null, retries = 0;
+      while (queue.length) {
+        const pc = queue.pop();
+        if (last && last.neighbors.indexOf(pc) !== -1 && retries < 5) {
+          queue.unshift(pc); retries++;
+        } else {
+          reordered.push(pc); last = pc; retries = 0;
+        }
+      }
     }
 
-    // 逐块放置：消费排序后的格子
-    for (const p of this.pieces) p._scattered = false;
-    let cellIdx = 0;
-    for (const p of reordered) {
-      const b = Knife.bounds(p);
-      // 主路径：消费格子（已按压参考图程度排序，靠前的格最安全）
+    // 方向→步进增量查找表（j: 3右 1下 2左 0上）
+    const ADV = { 3: { dx: 1, dy: 0 }, 1: { dx: 0, dy: 1 }, 2: { dx: -1, dy: 0 }, 0: { dx: 0, dy: -1 } };
+
+    // ===== 生成螺旋路径上所有不压参考图的位置（一次性，不重访）=====
+    // 用 j 状态机由外向内收缩，记录所有访问过的格子中心
+    const spiralSlots = [];
+    {
+      let sx = p / 2, sy = g / 2;          // 起点
+      let rO = this.W, rM = this.H, rA = C, rLb = 0; // 四边界
+      let dj = 3;                           // 初始方向：右
+      let dN = N, dR = R;                   // 配额副本
+      const visited = new Set();            // 已访问格(防止重访)
+      const maxIter = Math.ceil(this.W / S) * Math.ceil(this.H / C) + 40;
+      for (let iter = 0; iter < maxIter; iter++) {
+        // 量化坐标作为唯一键（按 S/C 取整）
+        const key = Math.round(sx / S) + "," + Math.round(sy / C);
+        if (!visited.has(key)) {
+          visited.add(key);
+          spiralSlots.push({ x: sx, y: sy });
+        }
+        // 步进
+        const adv = ADV[dj];
+        const nx = sx + adv.dx * S, ny = sy + adv.dy * C;
+        let turned = false;
+        if (dj === 3 && nx + S > rO) { dj = 1; dN--; rO -= S; sx = rO - p / 2; turned = true; }
+        else if (dj === 1 && ny + C > rM) { dj = 2; dR--; rM -= C; sy = rM - g / 2; turned = true; }
+        else if (dj === 2 && nx - S < p / 2) { dj = 0; dN--; sx = p / 2; turned = true; }
+        else if (dj === 0 && ny - C < rA) { dj = 3; dR--; sy = rA + g / 2; turned = true; }
+        if (!turned) { sx = nx; sy = ny; }
+        // 边界收缩到无效（rO < rLb 或 rM < rA）→ 螺旋已收缩完
+        if (rO <= rLb + S || rM <= rA + C) break;
+        if (dN <= 0 && dR <= 0) break;
+      }
+    }
+
+    // ===== 碰撞检测：不压参考图、不压已放置的块（文档 §3.6）=====
+    // 严格判定：块外接框相交即视为碰撞（不容差，否则抖动会导致擦边重叠）
+    const placedPieces = [];
+    const collides = (px, py, hw, hh, self) => {
+      if (px + hw > prev.left && px - hw < prev.right &&
+          py + hh > prev.top && py - hh < prev.bottom) return true;
+      for (const op of placedPieces) {
+        if (op === self) continue;
+        if (Math.abs(px - op.x) < (hw + op.width / 2) &&
+            Math.abs(py - op.y) < (hh + op.height / 2)) return true;
+      }
+      return false;
+    };
+
+    // ===== 逐块沿螺旋路径放置 =====
+    let slotIdx = 0;
+    for (const pc of reordered) {
+      const halfW = pc.width / 2, halfH = pc.height / 2;
+      const jx = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * p * 0.0625;
+      const jy = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * g * 0.0625;
       let placed = false;
-      while (cellIdx < cells.length) {
-        const cell = cells[cellIdx++];
-        const jx = (Math.random() - 0.5) * jitterX * 2;
-        const jy = (Math.random() - 0.5) * jitterY * 2;
-        p.x = Utils.clamp(cell.x + jx, b.w / 2 + PAD, this.W - b.w / 2 - PAD);
-        p.y = Utils.clamp(cell.y + jy, b.h / 2 + PAD, this.H - b.h / 2 - PAD);
-        p.hasMoved = false;
-        p._scattered = true;
-        p.z = ++this.zCounter;
-        cell.used = true;
-        placed = true;
-        break;
+      // 从当前 slot 起找下一个不碰撞的位置
+      while (slotIdx < spiralSlots.length) {
+        const slot = spiralSlots[slotIdx++];
+        if (!collides(slot.x, slot.y, halfW, halfH, pc)) {
+          pc.x = Utils.clamp(slot.x + jx, halfW + PAD, this.W - halfW - PAD);
+          pc.y = Utils.clamp(slot.y + jy, halfH + PAD, this.H - halfH - PAD);
+          pc.hasMoved = false;
+          pc.z = ++this.zCounter;
+          placedPieces.push(pc);
+          placed = true;
+          break;
+        }
       }
       if (placed) continue;
-      // 兜底：格子用完（块比格多），拒绝采样找最少碰撞位
-      const bw = p.width, bh = p.height;
-      const loX = bw / 2 + PAD, hiX = this.W - bw / 2 - PAD;
-      const loY = bh / 2 + PAD, hiY = this.H - bh / 2 - PAD;
+      // 兜底：拒绝采样找不压参考图、最少碰撞的位
       let best = null;
       for (let a = 0; a < 100; a++) {
-        const fx = loX + Math.random() * (hiX - loX);
-        const fy = loY + Math.random() * (hiY - loY);
+        const fx = halfW + PAD + Math.random() * (this.W - pc.width - PAD * 2);
+        const fy = halfH + PAD + Math.random() * (this.H - pc.height - PAD * 2);
+        if (inPreview(fx, fy, halfW, halfH)) continue;
         let hits = 0;
         for (const op of this.pieces) {
-          if (op === p || !op._scattered) continue;
-          if (Math.abs(fx - op.x) < (bw + op.width) / 2 - 2 &&
-              Math.abs(fy - op.y) < (bh + op.height) / 2 - 2) hits++;
+          if (op === pc) continue;
+          if (Math.abs(fx - op.x) < (pc.width + op.width) / 2 &&
+              Math.abs(fy - op.y) < (pc.height + op.height) / 2) hits++;
         }
         if (hits === 0) { best = { x: fx, y: fy }; break; }
         if (!best || hits < best.hits) best = { x: fx, y: fy, hits };
       }
-      p.x = best ? best.x : loX;
-      p.y = best ? best.y : loY;
-      p._scattered = true;
-      p.z = ++this.zCounter;
+      pc.x = best ? best.x : halfW + PAD;
+      pc.y = best ? best.y : halfH + PAD;
+      pc.hasMoved = false;
+      pc.z = ++this.zCounter;
+      placedPieces.push(pc);
     }
   }
 
