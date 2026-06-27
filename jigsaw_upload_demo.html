@@ -758,12 +758,14 @@ class Puzzle {
       if (!p.group || p.group.pieces.length !== 1) p.group = new Group([p]);
     }
 
-    // ===== 单元尺寸（文档 §3.1）：净宽 × 1.05 平均 =====
-    const margin2 = MARGIN * 2;
+    // ===== 单元尺寸：基于碎片实际渲染宽度（含凸耳+margin）=====
+    // 原版用净宽(width-2*margin)是因为margin是画在拼块内部的不透明区；
+    // 但 demo 的碰撞检测用的是完整外接框，所以槽位间距必须 ≥ 渲染宽度，
+    // 否则相邻槽位的碎片必然重叠。
     let p = 0, g = 0; // p=平均宽单元, g=平均高单元
-    for (const pc of this.pieces) { p += pc.width - margin2; g += pc.height - margin2; }
-    p = p * 1.05 / this.pieces.length;
-    g = g * 1.05 / this.pieces.length;
+    for (const pc of this.pieces) { p += pc.width; g += pc.height; }
+    p = p / this.pieces.length;   // 平均渲染宽
+    g = g / this.pieces.length;   // 平均渲染高
     // 边距系数（文档 §3.1）
     const l = p / 4, c = g / 4;     // l=水平四分之一, c=垂直四分之一
 
@@ -873,15 +875,18 @@ class Puzzle {
     let slotIdx = 0;
     for (const pc of reordered) {
       const halfW = pc.width / 2, halfH = pc.height / 2;
-      const jx = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * p * 0.0625;
-      const jy = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * g * 0.0625;
       let placed = false;
       // 从当前 slot 起找下一个不碰撞的位置
       while (slotIdx < spiralSlots.length) {
         const slot = spiralSlots[slotIdx++];
-        if (!collides(slot.x, slot.y, halfW, halfH, pc)) {
-          pc.x = Utils.clamp(slot.x + jx, halfW + PAD, this.W - halfW - PAD);
-          pc.y = Utils.clamp(slot.y + jy, halfH + PAD, this.H - halfH - PAD);
+        // 抖动后的实际位置（碰撞检测必须用实际放置位置，而非槽位原始坐标）
+        const jx = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * p * 0.0625;
+        const jy = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * g * 0.0625;
+        const fx = Utils.clamp(slot.x + jx, halfW + PAD, this.W - halfW - PAD);
+        const fy = Utils.clamp(slot.y + jy, halfH + PAD, this.H - halfH - PAD);
+        if (!collides(fx, fy, halfW, halfH, pc)) {
+          pc.x = fx;
+          pc.y = fy;
           pc.hasMoved = false;
           pc.z = ++this.zCounter;
           placedPieces.push(pc);
