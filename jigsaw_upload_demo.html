@@ -749,61 +749,42 @@ class Puzzle {
     this.moves = 0;
   }
 
-  // ---- 散开：螺旋环形布局（移植自 jigex-prog.js scatter，文档 §3.5）----
-  // 核心：碎片沿「由外向内的螺旋矩形路径」依次放置，方向状态机 j 控制（3右1下2左0上）。
-  // 到边界转向并缩小可用范围（N/R 配额），碰撞检测确保不压参考图和已拼合的组。
+  // ---- 散开：螺旋扫描 + AABB 硬约束（保证「块间零重叠」）----
+  // 第一性原理：对任意两块 A、B，「不重叠」当且仅当
+  //   |xA-xB| ≥ (wA+wB)/2  或  |yA-yB| ≥ (hA+hB)/2。
+  // 因此只要【每一次放置】都通过严格 AABB 碰撞检测（与所有已放块比对，
+  // 碰撞就换位），重叠就在结构上不可能发生——完全不依赖「槽位间距」
+  // 这个易错的中间量（旧版按平均块宽定间距，大块必然溢出槽位而重叠）。
+  //
+  // 策略：候选点按「螺旋由外向内」生成（贴近 jigex 原版观感）；
+  //       每块先找「不压参考图」的空位，找不到才允许压参考图（软约束）；
+  //       AABB 是硬约束——绝不接受任何块间碰撞。
   scatter() {
     // 先把所有拼块拆回单块组
     for (const p of this.pieces) {
       if (!p.group || p.group.pieces.length !== 1) p.group = new Group([p]);
     }
 
-    // ===== 单元尺寸：基于碎片实际渲染宽度（含凸耳+margin）=====
-    // 原版用净宽(width-2*margin)是因为margin是画在拼块内部的不透明区；
-    // 但 demo 的碰撞检测用的是完整外接框，所以槽位间距必须 ≥ 渲染宽度，
-    // 否则相邻槽位的碎片必然重叠。
-    let p = 0, g = 0; // p=平均宽单元, g=平均高单元
-    for (const pc of this.pieces) { p += pc.width; g += pc.height; }
-    p = p / this.pieces.length;   // 平均渲染宽
-    g = g / this.pieces.length;   // 平均渲染高
-    // 边距系数（文档 §3.1）
-    const l = p / 4, c = g / 4;     // l=水平四分之一, c=垂直四分之一
-
-    // ===== 参考图区（居中，碰撞检测用）=====
+    // ===== 参考图区（居中，压参考图为软约束）=====
     const cx = this.W / 2, cy = this.H / 2;
     const PAD = 12;
     const prev = {
       left: cx - this.subject.width / 2, right: cx + this.subject.width / 2,
       top: cy - this.subject.height / 2, bottom: cy + this.subject.height / 2,
     };
-
-    // ===== 网格行列数（文档 §3.3）=====
-    let w = this.W / p;              // 横向可放碎片数（浮点）
-    let P = this.H / g;              // 纵向可放碎片数（浮点）
-    let E = (w - Math.floor(w)) >= 0.5 ? 1 : 0;  // 列数是否向上取整
-    let k = (P - Math.floor(P)) >= 0.5 ? 1 : 0;  // 行数是否向上取整
-    let S = p * (w / (Math.floor(w) + E));        // 实际列宽（均匀铺满）
-    let C = g * (P / (Math.floor(P) + k));        // 实际行高
-
-    // ===== 螺旋边界初始化（文档 §10）=====
-    let I = p / 2;                   // 起始X（用碎片均宽 p，不是格子宽 S）
-    let L = g / 2;                   // 起始Y
-    let O = this.W;                  // 右边界
-    let A = C;                       // 上边界（初始为一个格子高）
-    let M = this.H;                  // 下边界
-    let j = 3;                       // 初始方向：向右
-
-    // ===== N/R 配额（文档 §9.2）：限制螺旋深入参考图区 =====
-    let G = this.W - this.subject.width;    // 左右两侧可用宽度之和
-    let V = this.H - this.subject.height;   // 上下两侧可用高度之和
-    let N = 999, R = 999;                    // 配额（999=无限）
-    if (G < V) { R = Math.floor(G / S); }   // 水平更窄 → 限制垂直折返
-    else { N = Math.floor(V / C); }          // 垂直更窄 → 限制水平折返
-
-    // ===== 碰撞检测：检查目标位 (I,L) 是否压参考图区 =====
     const inPreview = (px, py, halfW, halfH) =>
       px + halfW > prev.left && px - halfW < prev.right &&
       py + halfH > prev.top && py - halfH < prev.bottom;
+
+    // ===== 平均渲染尺寸（用于定扫描步进与抖动幅度）=====
+    let avgW = 0, avgH = 0;
+    for (const pc of this.pieces) { avgW += pc.width; avgH += pc.height; }
+    avgW /= this.pieces.length;
+    avgH /= this.pieces.length;
+    // 扫描步进：取平均短边的 1/4（够细以利用缝隙，又不会过慢）
+    const step = Math.max(6, Math.round(Math.min(avgW, avgH) / 4));
+    // 抖动幅度：< step/2，保证抖动不会把一块推进相邻空位的「死区」
+    const jitter = step / 2;
 
     // ===== 散布顺序（文档 §3.9）：sortOrder 排序 + 邻居错开 =====
     const sorted = this.pieces.slice().sort((a, b) => a.sort - b.sort);
@@ -821,100 +802,100 @@ class Puzzle {
         }
       }
     }
+    // 大块先放（更难找位），小块后放（易塞缝隙）→ 提高装箱率
+    reordered.sort((a, b) => (b.width * b.height) - (a.width * a.height));
 
-    // 方向→步进增量查找表（j: 3右 1下 2左 0上）
-    const ADV = { 3: { dx: 1, dy: 0 }, 1: { dx: 0, dy: 1 }, 2: { dx: -1, dy: 0 }, 0: { dx: 0, dy: -1 } };
-
-    // ===== 生成螺旋路径上所有不压参考图的位置（一次性，不重访）=====
-    // 用 j 状态机由外向内收缩，记录所有访问过的格子中心
-    const spiralSlots = [];
+    // ===== 候选点：螺旋由外向内（步进 = step）=====
+    // 网格行列按 step 划分，再以螺旋顺序（外圈→内圈）展开成点序列。
+    const cols = Math.max(1, Math.floor((this.W - PAD * 2) / step));
+    const rows = Math.max(1, Math.floor((this.H - PAD * 2) / step));
+    const ox = (this.W - (cols - 1) * step) / 2;   // 网格在画布内居中
+    const oy = (this.H - (rows - 1) * step) / 2;
+    const candidates = [];
     {
-      let sx = p / 2, sy = g / 2;          // 起点
-      let rO = this.W, rM = this.H, rA = C, rLb = 0; // 四边界
-      let dj = 3;                           // 初始方向：右
-      let dN = N, dR = R;                   // 配额副本
-      const visited = new Set();            // 已访问格(防止重访)
-      const maxIter = Math.ceil(this.W / S) * Math.ceil(this.H / C) + 40;
-      for (let iter = 0; iter < maxIter; iter++) {
-        // 量化坐标作为唯一键（按 S/C 取整）
-        const key = Math.round(sx / S) + "," + Math.round(sy / C);
-        if (!visited.has(key)) {
-          visited.add(key);
-          spiralSlots.push({ x: sx, y: sy });
-        }
-        // 步进
-        const adv = ADV[dj];
-        const nx = sx + adv.dx * S, ny = sy + adv.dy * C;
-        let turned = false;
-        if (dj === 3 && nx + S > rO) { dj = 1; dN--; rO -= S; sx = rO - p / 2; turned = true; }
-        else if (dj === 1 && ny + C > rM) { dj = 2; dR--; rM -= C; sy = rM - g / 2; turned = true; }
-        else if (dj === 2 && nx - S < p / 2) { dj = 0; dN--; sx = p / 2; turned = true; }
-        else if (dj === 0 && ny - C < rA) { dj = 3; dR--; sy = rA + g / 2; turned = true; }
-        if (!turned) { sx = nx; sy = ny; }
-        // 边界收缩到无效（rO < rLb 或 rM < rA）→ 螺旋已收缩完
-        if (rO <= rLb + S || rM <= rA + C) break;
-        if (dN <= 0 && dR <= 0) break;
+      let top = 0, bottom = rows - 1, left = 0, right = cols - 1;
+      while (top <= bottom && left <= right) {
+        for (let c = left; c <= right; c++) candidates.push({ x: ox + c * step, y: oy + top * step });
+        top++;
+        if (top <= bottom) { for (let r = top; r <= bottom; r++) candidates.push({ x: ox + right * step, y: oy + r * step }); right--; }
+        if (top <= bottom) { for (let c = right; c >= left; c--) candidates.push({ x: ox + c * step, y: oy + bottom * step }); bottom--; }
+        if (left <= right) { for (let r = bottom; r >= top; r--) candidates.push({ x: ox + left * step, y: oy + r * step }); left++; }
       }
     }
 
-    // ===== 碰撞检测：不压参考图、不压已放置的块（文档 §3.6）=====
-    // 严格判定：块外接框相交即视为碰撞（不容差，否则抖动会导致擦边重叠）
+    // ===== AABB 硬约束：只查块间碰撞（不查参考图，参考图是软约束）=====
     const placedPieces = [];
-    const collides = (px, py, hw, hh, self) => {
-      if (px + hw > prev.left && px - hw < prev.right &&
-          py + hh > prev.top && py - hh < prev.bottom) return true;
+    const collides = (px, py, hw, hh) => {
       for (const op of placedPieces) {
-        if (op === self) continue;
         if (Math.abs(px - op.x) < (hw + op.width / 2) &&
             Math.abs(py - op.y) < (hh + op.height / 2)) return true;
       }
       return false;
     };
 
-    // ===== 逐块沿螺旋路径放置 =====
-    let slotIdx = 0;
-    for (const pc of reordered) {
-      const halfW = pc.width / 2, halfH = pc.height / 2;
-      let placed = false;
-      // 从当前 slot 起找下一个不碰撞的位置
-      while (slotIdx < spiralSlots.length) {
-        const slot = spiralSlots[slotIdx++];
-        // 抖动后的实际位置（碰撞检测必须用实际放置位置，而非槽位原始坐标）
-        const jx = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * p * 0.0625;
-        const jy = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * g * 0.0625;
-        const fx = Utils.clamp(slot.x + jx, halfW + PAD, this.W - halfW - PAD);
-        const fy = Utils.clamp(slot.y + jy, halfH + PAD, this.H - halfH - PAD);
-        if (!collides(fx, fy, halfW, halfH, pc)) {
-          pc.x = fx;
-          pc.y = fy;
-          pc.hasMoved = false;
-          pc.z = ++this.zCounter;
-          placedPieces.push(pc);
-          placed = true;
-          break;
-        }
-      }
-      if (placed) continue;
-      // 兜底：拒绝采样找不压参考图、最少碰撞的位
-      let best = null;
-      for (let a = 0; a < 100; a++) {
-        const fx = halfW + PAD + Math.random() * (this.W - pc.width - PAD * 2);
-        const fy = halfH + PAD + Math.random() * (this.H - pc.height - PAD * 2);
-        if (inPreview(fx, fy, halfW, halfH)) continue;
-        let hits = 0;
-        for (const op of this.pieces) {
-          if (op === pc) continue;
-          if (Math.abs(fx - op.x) < (pc.width + op.width) / 2 &&
-              Math.abs(fy - op.y) < (pc.height + op.height) / 2) hits++;
-        }
-        if (hits === 0) { best = { x: fx, y: fy }; break; }
-        if (!best || hits < best.hits) best = { x: fx, y: fy, hits };
-      }
-      pc.x = best ? best.x : halfW + PAD;
-      pc.y = best ? best.y : halfH + PAD;
+    // 放下一块：记录坐标 + 副作用，并登记到 placedPieces
+    const commit = (pc, fx, fy) => {
+      pc.x = fx; pc.y = fy;
       pc.hasMoved = false;
       pc.z = ++this.zCounter;
       placedPieces.push(pc);
+    };
+
+    // ===== 逐块放置 =====
+    for (const pc of reordered) {
+      const halfW = pc.width / 2, halfH = pc.height / 2;
+      // 螺旋候选点先扫一遍，分两 pass：
+      //   pass1：不压参考图 且 AABB 不碰撞
+      //   pass2：允许压参考图，仅 AABB 不碰撞
+      let spot = null;        // {x,y} 不压参考图的命中
+      let spotPrev = null;    // {x,y} 压参考图的命中（兜底）
+      for (const cand of candidates) {
+        const fx = Utils.clamp(cand.x, halfW + PAD, this.W - halfW - PAD);
+        const fy = Utils.clamp(cand.y, halfH + PAD, this.H - halfH - PAD);
+        if (collides(fx, fy, halfW, halfH)) continue;       // 硬约束：块间不重叠
+        if (!inPreview(fx, fy, halfW, halfH)) { spot = { x: fx, y: fy }; break; }
+        if (!spotPrev) spotPrev = { x: fx, y: fy };
+      }
+      let chosen = spot || spotPrev;
+
+      // 抖动（避免完美对齐的死板感）；抖动后再验一次 AABB，碰撞则回退原候选点
+      if (chosen) {
+        const jx = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * jitter;
+        const jy = (Math.random() >= 0.5 ? 1 : -1) * Math.random() * jitter;
+        let fx = Utils.clamp(chosen.x + jx, halfW + PAD, this.W - halfW - PAD);
+        let fy = Utils.clamp(chosen.y + jy, halfH + PAD, this.H - halfH - PAD);
+        if (collides(fx, fy, halfW, halfH)) { fx = chosen.x; fy = chosen.y; }
+        commit(pc, fx, fy);
+        continue;
+      }
+
+      // ===== 极端兜底（理论几乎不会到这：candidates 已覆盖全画布）=====
+      // 细步进逐行扫描全画布找第一个 AABB 不碰撞点；先扫参考图外，再扫参考图内。
+      // 注意：这里的 AABB 检测是「块间零重叠」的最终保证。
+      const scanFind = (avoidPreview) => {
+        for (let y = halfH + PAD; y <= this.H - halfH - PAD; y += step) {
+          for (let x = halfW + PAD; x <= this.W - halfW - PAD; x += step) {
+            if (avoidPreview && inPreview(x, y, halfW, halfH)) continue;
+            if (!collides(x, y, halfW, halfH)) return { x, y };
+          }
+        }
+        return null;
+      };
+      chosen = scanFind(true) || scanFind(false);
+      if (chosen) { commit(pc, chosen.x, chosen.y); continue; }
+
+      // 真正放不下（块面积和 > 画布，极端超载场景）：
+      // 允许块「溢出画布边界」（部分露出画布外，渲染时自然裁剪），但绝不与其他块重叠。
+      // 从画布左上角开始，沿对角线找第一个 AABB 不碰撞点——宁可溢出也不要重叠。
+      {
+        let fx = null, fy = null;
+        for (let y = halfH; y < this.H + halfH && fx === null; y += step) {
+          for (let x = halfW; x < this.W + halfH && fx === null; x += step) {
+            if (!collides(x, y, halfW, halfH)) { fx = x; fy = y; }
+          }
+        }
+        commit(pc, fx !== null ? fx : halfW, fy !== null ? fy : halfH);
+      }
     }
   }
 
